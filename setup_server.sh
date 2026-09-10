@@ -61,8 +61,21 @@ function install_dependencies() {
     fi
     
     if ! command -v msbuild &> /dev/null; then
-        echo -e "${RED}ERROR: No se pudo instalar msbuild desde los repositorios por defecto.${NC}"
-        echo -e "${RED}Por favor instala Mono manualmente en tu Raspberry Pi e intenta de nuevo.${NC}"
+        apt-get install -y mono-msbuild || true
+    fi
+    
+    if ! command -v msbuild &> /dev/null; then
+        print_warn "No se encontró MSBuild en los repositorios locales."
+        print_warn "Forzando instalación desde el repositorio oficial de Mono (saltando firma GPG obsoleta)..."
+        
+        echo "deb [trusted=yes] https://download.mono-project.com/repo/debian stable-buster main" > /etc/apt/sources.list.d/mono-official-stable.list
+        apt-get update -y --allow-insecure-repositories || true
+        apt-get install -y --allow-unauthenticated mono-complete msbuild
+    fi
+    
+    if ! command -v msbuild &> /dev/null; then
+        echo -e "${RED}ERROR: No se pudo instalar msbuild desde ninguna fuente.${NC}"
+        echo -e "${RED}Por favor instala Mono y MSBuild manualmente en tu Raspberry Pi e intenta de nuevo.${NC}"
         exit 1
     fi
   else
