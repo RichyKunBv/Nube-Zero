@@ -39,15 +39,20 @@ function install_dependencies() {
   apt-get install -y curl unzip
   
   if ! command -v mono &> /dev/null || ! command -v msbuild &> /dev/null; then
-    print_warn "Mono o MSBuild no encontrados. Instalando mono-complete..."
-    # Instalar certificado y repositorio de Mono (Debian/Ubuntu/Raspbian)
-    apt install -y apt-transport-https dirmngr gnupg ca-certificates
-    if [ ! -f /etc/apt/keyrings/mono-official-archive-keyring.gpg ]; then
-        curl -sL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF" | gpg --dearmor > /etc/apt/keyrings/mono-official-archive-keyring.gpg
-        echo "deb [signed-by=/etc/apt/keyrings/mono-official-archive-keyring.gpg] https://download.mono-project.com/repo/debian stable-buster main" | tee /etc/apt/sources.list.d/mono-official-stable.list
-        apt-get update -y
+    print_warn "Mono o MSBuild no encontrados. Intentando instalar desde los repositorios oficiales de tu sistema..."
+    
+    # Mono y MSBuild suelen estar disponibles en los repositorios por defecto en Debian 11+ / Raspbian
+    apt-get install -y mono-complete || apt-get install -y mono-devel
+    
+    if ! command -v msbuild &> /dev/null; then
+        apt-get install -y msbuild || true
     fi
-    apt-get install -y mono-complete
+    
+    if ! command -v msbuild &> /dev/null; then
+        echo -e "${RED}ERROR: No se pudo instalar msbuild desde los repositorios por defecto.${NC}"
+        echo -e "${RED}Por favor instala Mono manualmente en tu Raspberry Pi e intenta de nuevo.${NC}"
+        exit 1
+    fi
   else
     echo "Mono y MSBuild ya están instalados."
   fi
