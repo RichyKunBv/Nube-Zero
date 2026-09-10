@@ -12,6 +12,8 @@
 		<SingleProject>true</SingleProject>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		<VersionFileContent>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)..\shared\Version.cs'))</VersionFileContent>
+		<Version>$([System.Text.RegularExpressions.Regex]::Match($(VersionFileContent), '(?&lt;= "V?)[0-9\.]+').Value)</Version>
 
 		<MauiXamlInflator>SourceGen</MauiXamlInflator>
 		<ApplicationTitle>NubeZero.Mobile</ApplicationTitle>

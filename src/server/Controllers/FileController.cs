@@ -12,10 +12,12 @@ namespace NubeZero.Server.Controllers
     public class FileController
     {
         private readonly StorageService _storageService;
+        private readonly NubeZero.Server.Data.DatabaseContext _dbContext;
         
-        public FileController(StorageService storageService)
+        public FileController(StorageService storageService, NubeZero.Server.Data.DatabaseContext dbContext)
         {
             _storageService = storageService;
+            _dbContext = dbContext;
         }
 
         public async Task HandleListDirectoryAsync(HttpListenerContext context, string relativePath)
@@ -51,13 +53,14 @@ namespace NubeZero.Server.Controllers
                 foreach (var file in Directory.EnumerateFiles(safePath))
                 {
                     var info = new FileInfo(file);
+                    string owner = _dbContext.GetFileOwner(file);
                     filesList.Add(new ArchivoDTO
                     {
                         Nombre = info.Name,
                         EsCarpeta = false,
                         FechaModificacion = info.LastWriteTimeUtc,
                         PesoBytes = info.Length,
-                        ModificadoPor = "System"
+                        ModificadoPor = owner
                     });
                 }
 
@@ -120,7 +123,7 @@ namespace NubeZero.Server.Controllers
             }
         }
 
-        public async Task HandleUploadAsync(HttpListenerContext context, string relativePath)
+        public async Task HandleUploadAsync(HttpListenerContext context, string relativePath, string username)
         {
             var request = context.Request;
             var response = context.Response;
@@ -141,11 +144,16 @@ namespace NubeZero.Server.Controllers
                     Directory.CreateDirectory(parentDir);
                 }
 
+                long fileLength = request.ContentLength64 > 0 ? request.ContentLength64 : 0;
+
                 // Escribir directamente desde el InputStream al disco
                 using (var fs = new FileStream(safePath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
                 {
                     await request.InputStream.CopyToAsync(fs, 81920);
+                    if (fileLength == 0) fileLength = fs.Length;
                 }
+
+                _dbContext.SaveFileMetadata(safePath, username, fileLength);
 
                 response.StatusCode = 201; // Created
                 response.ContentType = "application/json";
@@ -183,10 +191,12 @@ namespace NubeZero.Server.Controllers
                 if (File.Exists(safePath))
                 {
                     File.Delete(safePath);
+                    _dbContext.DeleteFileMetadata(safePath);
                 }
                 else if (Directory.Exists(safePath))
                 {
                     Directory.Delete(safePath, true);
+                    // Opcional: borrar recursivamente los metadatos de los hijos
                 }
                 else
                 {
@@ -276,6 +286,7 @@ namespace NubeZero.Server.Controllers
                 if (File.Exists(safePath))
                 {
                     File.Move(safePath, newSafePath);
+                    _dbContext.RenameFileMetadata(safePath, newSafePath);
                 }
                 else if (Directory.Exists(safePath))
                 {

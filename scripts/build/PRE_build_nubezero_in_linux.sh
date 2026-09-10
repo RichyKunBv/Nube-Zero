@@ -12,7 +12,7 @@ if [[ "$(uname)" != "Linux" ]]; then
 fi
 
 # Definir las rutas
-PROJECT_DIR="$HOME/NubeZero"
+PROJECT_DIR="$HOME/Repos/Nube-Zero"
 
 MACOS_ARM_APP="$HOME/NubeZeroARM64macOS/NubeZero.app"
 MACOS_X64_APP="$HOME/NubeZeroX86_64macOS/NubeZero.app"
@@ -30,8 +30,8 @@ carpeta_macOS() {
     mkdir -p "$MACOS_ARM_APP/Contents/"{MacOS,Resources}
     
     # IMPORTANTE: Copiar el Info.plist base para tener algo que editar después
-    cp "$PROJECT_DIR/src/Info.plist.template" "$MACOS_X64_APP/Contents/Info.plist" 2>/dev/null || echo "Aviso: No se encontró Info.plist.template base"
-    cp "$PROJECT_DIR/src/Info.plist.template" "$MACOS_ARM_APP/Contents/Info.plist" 2>/dev/null
+    cp "$PROJECT_DIR/src/desktop/Info.plist.template" "$MACOS_X64_APP/Contents/Info.plist" 2>/dev/null || echo "Aviso: No se encontró Info.plist.template base"
+    cp "$PROJECT_DIR/src/desktop/Info.plist.template" "$MACOS_ARM_APP/Contents/Info.plist" 2>/dev/null
     
     echo "Carpetas de macOS creadas"
 }
@@ -40,7 +40,7 @@ actualizar_macOS() {
     echo "=== Iniciando compilación de NubeZero para macOS ==="
 
     # 1. Extraer la versión del archivo .csproj usando awk
-    VERSION=$(awk -F'[><]' '/<Version>/{print $3}' "$PROJECT_DIR/src/desktop/NubeZero.Desktop.csproj")
+    VERSION=$(awk -F'"' '/public static string Texto/ {gsub(/V/, "", $2); print $2}' "$PROJECT_DIR/src/shared/Version.cs")
 
     if [ -z "$VERSION" ]; then
         echo "Error: No se pudo encontrar la etiqueta <Version> en el .csproj"
@@ -51,22 +51,22 @@ actualizar_macOS() {
     echo "Publicando binarios..."
 
     # 2. Compilar ambas arquitecturas
-    cd "$PROJECT_DIR/src" || exit 1
+    cd "$PROJECT_DIR/src/desktop" || exit 1
     dotnet publish -c Release -r osx-arm64 --self-contained -p:PublishSingleFile=true
     dotnet publish -c Release -r osx-x64 --self-contained -p:PublishSingleFile=true
 
     echo "Copiando archivos y actualizando Info.plist..."
 
     # 3. Procesar versión ARM64
-    cp -a "$PROJECT_DIR/src/bin/Release/net10.0/osx-arm64/publish/." "$MACOS_ARM_APP/Contents/MacOS/"
-    cp "$PROJECT_DIR/src/Assets/icon.icns" "$MACOS_ARM_APP/Contents/Resources/" 2>/dev/null
+    cp -a "$PROJECT_DIR/src/desktop/bin/Release/net10.0/osx-arm64/publish/." "$MACOS_ARM_APP/Contents/MacOS/"
+    cp "$PROJECT_DIR/src/desktop/Assets/icon.icns" "$MACOS_ARM_APP/Contents/Resources/" 2>/dev/null
     
     # En Linux no tenemos plutil, usamos Python3 (plistlib nativo) para editar el plist de forma segura
     python3 -c "import plistlib, sys; p=sys.argv[1]; d=plistlib.load(open(p,'rb')); d['CFBundleVersion']=sys.argv[2]; d['CFBundleShortVersionString']=sys.argv[2]; plistlib.dump(d,open(p,'wb'))" "$MACOS_ARM_APP/Contents/Info.plist" "$VERSION" 2>/dev/null || echo "Aviso: No se pudo actualizar Info.plist de ARM64"
 
     # 4. Procesar versión X86_64
-    cp -a "$PROJECT_DIR/src/bin/Release/net10.0/osx-x64/publish/." "$MACOS_X64_APP/Contents/MacOS/"
-    cp "$PROJECT_DIR/src/Assets/icon.icns" "$MACOS_X64_APP/Contents/Resources/" 2>/dev/null
+    cp -a "$PROJECT_DIR/src/desktop/bin/Release/net10.0/osx-x64/publish/." "$MACOS_X64_APP/Contents/MacOS/"
+    cp "$PROJECT_DIR/src/desktop/Assets/icon.icns" "$MACOS_X64_APP/Contents/Resources/" 2>/dev/null
     
     python3 -c "import plistlib, sys; p=sys.argv[1]; d=plistlib.load(open(p,'rb')); d['CFBundleVersion']=sys.argv[2]; d['CFBundleShortVersionString']=sys.argv[2]; plistlib.dump(d,open(p,'wb'))" "$MACOS_X64_APP/Contents/Info.plist" "$VERSION" 2>/dev/null || echo "Aviso: No se pudo actualizar Info.plist de x64"
 
@@ -94,7 +94,7 @@ carpeta_windows() {
 actualizar_windows() {
     echo "=== Iniciando compilación de NubeZero para Windows ==="
 
-    VERSION=$(awk -F'[><]' '/<Version>/{print $3}' "$PROJECT_DIR/src/desktop/NubeZero.Desktop.csproj")
+    VERSION=$(awk -F'"' '/public static string Texto/ {gsub(/V/, "", $2); print $2}' "$PROJECT_DIR/src/shared/Version.cs")
 
     if [ -z "$VERSION" ]; then
         echo "Error: No se pudo encontrar la etiqueta <Version> en el .csproj"
@@ -104,7 +104,7 @@ actualizar_windows() {
     echo "Versión detectada: $VERSION"
     echo "Publicando binarios..."
 
-    cd "$PROJECT_DIR/src" || exit 1
+    cd "$PROJECT_DIR/src/desktop" || exit 1
     # Compilar para Windows ARM64
     dotnet publish -c Release -r win-arm64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None
     # Compilar para Windows x64
@@ -113,11 +113,11 @@ actualizar_windows() {
     echo "Copiando ejecutables..."
 
     # Procesar versión ARM64
-    cp -a "$PROJECT_DIR/src/bin/Release/net10.0/win-arm64/publish/." "$WIN_ARM_DIR/"
+    cp -a "$PROJECT_DIR/src/desktop/bin/Release/net10.0/win-arm64/publish/." "$WIN_ARM_DIR/"
     rm -rf "$WIN_ARM_DIR"/*.pdb
 
     # Procesar versión X86_64
-    cp -a "$PROJECT_DIR/src/bin/Release/net10.0/win-x64/publish/." "$WIN_X64_DIR/"
+    cp -a "$PROJECT_DIR/src/desktop/bin/Release/net10.0/win-x64/publish/." "$WIN_X64_DIR/"
     rm -rf "$WIN_X64_DIR"/*.pdb
 
     echo "=== ¡Listo! NubeZero v$VERSION empaquetado para Windows (x64/ARM64) ==="
@@ -139,7 +139,7 @@ carpeta_linux() {
 actualizar_linux() {
     echo "=== Iniciando compilación de NubeZero para Linux ==="
 
-    VERSION=$(awk -F'[><]' '/<Version>/{print $3}' "$PROJECT_DIR/src/desktop/NubeZero.Desktop.csproj")
+    VERSION=$(awk -F'"' '/public static string Texto/ {gsub(/V/, "", $2); print $2}' "$PROJECT_DIR/src/shared/Version.cs")
 
     if [ -z "$VERSION" ]; then
         echo "Error: No se pudo encontrar la etiqueta <Version> en el .csproj"
@@ -149,7 +149,7 @@ actualizar_linux() {
     echo "Versión detectada: $VERSION"
     echo "Publicando binarios..."
 
-    cd "$PROJECT_DIR/src" || exit 1
+    cd "$PROJECT_DIR/src/desktop" || exit 1
     # Compilar para Linux ARM64
     dotnet publish -c Release -r linux-arm64 --self-contained -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:PublishSingleFile=true    
     # Compilar para Linux x64
@@ -158,8 +158,8 @@ actualizar_linux() {
     echo "Copiando archivos y actualizando .desktop..."
 
     # Procesar versión ARM64
-    cp -a "$PROJECT_DIR/src/bin/Release/net10.0/linux-arm64/publish/." "$LINUX_ARM_DIR/"
-    cp "$PROJECT_DIR/src/Assets/icon.png" "$LINUX_ARM_DIR/" 2>/dev/null
+    cp -a "$PROJECT_DIR/src/desktop/bin/Release/net10.0/linux-arm64/publish/." "$LINUX_ARM_DIR/"
+    cp "$PROJECT_DIR/src/desktop/Assets/icon.png" "$LINUX_ARM_DIR/" 2>/dev/null
     
     # En Linux, GNU sed no requiere la extensión .bak para editar en el lugar de forma segura
     if [ -f "$LINUX_ARM_DIR/NubeZero.desktop" ]; then
@@ -167,8 +167,8 @@ actualizar_linux() {
     fi
 
     # Procesar versión X86_64
-    cp -a "$PROJECT_DIR/src/bin/Release/net10.0/linux-x64/publish/." "$LINUX_X64_DIR/"
-    cp "$PROJECT_DIR/src/Assets/icon.png" "$LINUX_X64_DIR/" 2>/dev/null
+    cp -a "$PROJECT_DIR/src/desktop/bin/Release/net10.0/linux-x64/publish/." "$LINUX_X64_DIR/"
+    cp "$PROJECT_DIR/src/desktop/Assets/icon.png" "$LINUX_X64_DIR/" 2>/dev/null
     
     if [ -f "$LINUX_X64_DIR/NubeZero.desktop" ]; then
         sed -i "s/^Version=.*/Version=$VERSION/" "$LINUX_X64_DIR/NubeZero.desktop"

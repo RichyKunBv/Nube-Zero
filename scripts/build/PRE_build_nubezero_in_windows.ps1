@@ -10,7 +10,7 @@ if (-not $IsWindows -and $PSVersionTable.Platform -ne 'Win32NT') {
 }
 
 # Definir rutas (usando el perfil de usuario de Windows)
-$PROJECT_DIR   = "$env:USERPROFILE\NubeZero"
+$PROJECT_DIR   = "$env:USERPROFILE\Repos\Nube-Zero"
 $WIN_X64_DIR   = "$env:USERPROFILE\NubeZeroX86_64Windows"
 $WIN_ARM_DIR   = "$env:USERPROFILE\NubeZeroARM64Windows"
 $LINUX_X64_DIR = "$env:USERPROFILE\NubeZeroX86_64Linux"
@@ -38,7 +38,7 @@ function carpeta_macOS {
     }
 
     # Copiar Info.plist.template a ambas apps (ignorar errores si no existe)
-    $template = "$PROJECT_DIR\src\Info.plist.template"
+    $template = "$PROJECT_DIR\src\desktop\Info.plist.template"
     if (Test-Path $template) {
         Copy-Item -Force $template "$MACOS_ARM_APP\Contents\Info.plist"
         Copy-Item -Force $template "$MACOS_X64_APP\Contents\Info.plist"
@@ -53,23 +53,23 @@ function actualizar_macOS {
     Write-Host "=== Iniciando compilación de NubeZero para macOS desde Windows ==="
 
     # Extraer versión del .csproj
-    $csprojPath = "$PROJECT_DIR\src\desktop\NubeZero.Desktop.csproj"
+    $csprojPath = "$PROJECT_DIR\src\shared\Version.cs"
     if (-not (Test-Path $csprojPath)) {
         Write-Host "Error: No se encontró $csprojPath" -ForegroundColor Red
         return
     }
     $csprojContent = Get-Content $csprojPath -Raw
-    if ($csprojContent -match '<Version>(.*?)</Version>') {
+    if ($csprojContent -match 'public static string Texto.*?=\s*"V?(.*?)"') {
         $VERSION = $Matches[1]
     } else {
-        Write-Host "Error: No se encontró la etiqueta <Version> en el .csproj" -ForegroundColor Red
+        Write-Host "Error: No se encontró public static string Texto en Version.cs" -ForegroundColor Red
         return
     }
 
     Write-Host "Versión detectada: $VERSION"
     Write-Host "Publicando binarios..."
 
-    Set-Location "$PROJECT_DIR\src"
+    Set-Location "$PROJECT_DIR\src\desktop"
 
     dotnet publish -c Release -r osx-arm64 --self-contained -p:PublishSingleFile=true
     dotnet publish -c Release -r osx-x64 --self-contained -p:PublishSingleFile=true
@@ -78,15 +78,15 @@ function actualizar_macOS {
 
     # --- ARM64 ---
     # Copiar binarios a la estructura .app (se sobreescribe si existe)
-    Copy-Item -Recurse -Force "$PROJECT_DIR\src\bin\Release\net10.0\osx-arm64\publish\*" "$MACOS_ARM_APP\Contents\MacOS\"
+    Copy-Item -Recurse -Force "$PROJECT_DIR\src\desktop\bin\Release\net10.0\osx-arm64\publish\*" "$MACOS_ARM_APP\Contents\MacOS\"
     # Copiar icono (si existe)
-    if (Test-Path "$PROJECT_DIR\src\Assets\icon.icns") {
-        Copy-Item -Force "$PROJECT_DIR\src\Assets\icon.icns" "$MACOS_ARM_APP\Contents\Resources\"
+    if (Test-Path "$PROJECT_DIR\src\desktop\Assets\icon.icns") {
+        Copy-Item -Force "$PROJECT_DIR\src\desktop\Assets\icon.icns" "$MACOS_ARM_APP\Contents\Resources\"
     }
 
     # Asegurar que Info.plist existe
     if (-not (Test-Path "$MACOS_ARM_APP\Contents\Info.plist")) {
-        Copy-Item -Force "$PROJECT_DIR\src\Info.plist.template" "$MACOS_ARM_APP\Contents\Info.plist"
+        Copy-Item -Force "$PROJECT_DIR\src\desktop\Info.plist.template" "$MACOS_ARM_APP\Contents\Info.plist"
     }
 
     # Actualizar versión con Python (plistlib nativo)
@@ -97,13 +97,13 @@ function actualizar_macOS {
     }
 
     # --- x64 --- (lo mismo)
-    Copy-Item -Recurse -Force "$PROJECT_DIR\src\bin\Release\net10.0\osx-x64\publish\*" "$MACOS_X64_APP\Contents\MacOS\"
-    if (Test-Path "$PROJECT_DIR\src\Assets\icon.icns") {
-        Copy-Item -Force "$PROJECT_DIR\src\Assets\icon.icns" "$MACOS_X64_APP\Contents\Resources\"
+    Copy-Item -Recurse -Force "$PROJECT_DIR\src\desktop\bin\Release\net10.0\osx-x64\publish\*" "$MACOS_X64_APP\Contents\MacOS\"
+    if (Test-Path "$PROJECT_DIR\src\desktop\Assets\icon.icns") {
+        Copy-Item -Force "$PROJECT_DIR\src\desktop\Assets\icon.icns" "$MACOS_X64_APP\Contents\Resources\"
     }
 
     if (-not (Test-Path "$MACOS_X64_APP\Contents\Info.plist")) {
-        Copy-Item -Force "$PROJECT_DIR\src\Info.plist.template" "$MACOS_X64_APP\Contents\Info.plist"
+        Copy-Item -Force "$PROJECT_DIR\src\desktop\Info.plist.template" "$MACOS_X64_APP\Contents\Info.plist"
     }
 
     $plistPath = "$MACOS_X64_APP\Contents\Info.plist"
@@ -128,23 +128,23 @@ function actualizar_windows {
     Write-Host "=== Iniciando compilación de NubeZero para Windows ==="
 
     # Obtener versión del .csproj usando expresión regular
-    $csprojPath = "$PROJECT_DIR\src\desktop\NubeZero.Desktop.csproj"
+    $csprojPath = "$PROJECT_DIR\src\shared\Version.cs"
     if (-not (Test-Path $csprojPath)) {
         Write-Host "Error: No se encontró $csprojPath" -ForegroundColor Red
         return
     }
     $csprojContent = Get-Content $csprojPath -Raw
-    if ($csprojContent -match '<Version>(.*?)</Version>') {
+    if ($csprojContent -match 'public static string Texto.*?=\s*"V?(.*?)"') {
         $VERSION = $Matches[1]
     } else {
-        Write-Host "Error: No se encontró la etiqueta <Version> en el .csproj" -ForegroundColor Red
+        Write-Host "Error: No se encontró public static string Texto en Version.cs" -ForegroundColor Red
         return
     }
 
     Write-Host "Versión detectada: $VERSION"
     Write-Host "Publicando binarios..."
 
-    Set-Location "$PROJECT_DIR\src"
+    Set-Location "$PROJECT_DIR\src\desktop"
 
     dotnet publish -c Release -r win-arm64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None
     dotnet publish -c Release -r win-x64   --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None
@@ -152,11 +152,11 @@ function actualizar_windows {
     Write-Host "Copiando ejecutables..."
 
     # ARM64
-    Copy-Item -Recurse -Force "$PROJECT_DIR\src\bin\Release\net10.0\win-arm64\publish\*" $WIN_ARM_DIR
+    Copy-Item -Recurse -Force "$PROJECT_DIR\src\desktop\bin\Release\net10.0\win-arm64\publish\*" $WIN_ARM_DIR
     Remove-Item -Force "$WIN_ARM_DIR\*.pdb" -ErrorAction SilentlyContinue
 
     # x64
-    Copy-Item -Recurse -Force "$PROJECT_DIR\src\bin\Release\net10.0\win-x64\publish\*" $WIN_X64_DIR
+    Copy-Item -Recurse -Force "$PROJECT_DIR\src\desktop\bin\Release\net10.0\win-x64\publish\*" $WIN_X64_DIR
     Remove-Item -Force "$WIN_X64_DIR\*.pdb" -ErrorAction SilentlyContinue
 
     Write-Host "=== ¡Listo! NubeZero v$VERSION empaquetado para Windows (x64/ARM64) ==="
@@ -180,23 +180,23 @@ function carpeta_linux {
 function actualizar_linux {
     Write-Host "=== Iniciando compilación de NubeZero para Linux ==="
 
-    $csprojPath = "$PROJECT_DIR\src\desktop\NubeZero.Desktop.csproj"
+    $csprojPath = "$PROJECT_DIR\src\shared\Version.cs"
     if (-not (Test-Path $csprojPath)) {
         Write-Host "Error: No se encontró $csprojPath" -ForegroundColor Red
         return
     }
     $csprojContent = Get-Content $csprojPath -Raw
-    if ($csprojContent -match '<Version>(.*?)</Version>') {
+    if ($csprojContent -match 'public static string Texto.*?=\s*"V?(.*?)"') {
         $VERSION = $Matches[1]
     } else {
-        Write-Host "Error: No se encontró la etiqueta <Version> en el .csproj" -ForegroundColor Red
+        Write-Host "Error: No se encontró public static string Texto en Version.cs" -ForegroundColor Red
         return
     }
 
     Write-Host "Versión detectada: $VERSION"
     Write-Host "Publicando binarios..."
 
-    Set-Location "$PROJECT_DIR\src"
+    Set-Location "$PROJECT_DIR\src\desktop"
 
     dotnet publish -c Release -r linux-arm64 --self-contained -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:PublishSingleFile=true
     dotnet publish -c Release -r linux-x64   --self-contained -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:PublishSingleFile=true
@@ -204,8 +204,8 @@ function actualizar_linux {
     Write-Host "Copiando archivos y actualizando .desktop..."
 
     # ARM64
-    Copy-Item -Recurse -Force "$PROJECT_DIR\src\bin\Release\net10.0\linux-arm64\publish\*" $LINUX_ARM_DIR
-    Copy-Item -Force "$PROJECT_DIR\src\Assets\icon.png" $LINUX_ARM_DIR -ErrorAction SilentlyContinue
+    Copy-Item -Recurse -Force "$PROJECT_DIR\src\desktop\bin\Release\net10.0\linux-arm64\publish\*" $LINUX_ARM_DIR
+    Copy-Item -Force "$PROJECT_DIR\src\desktop\Assets\icon.png" $LINUX_ARM_DIR -ErrorAction SilentlyContinue
 
     $desktopFile = "$LINUX_ARM_DIR\NubeZero.desktop"
     if (Test-Path $desktopFile) {
@@ -213,8 +213,8 @@ function actualizar_linux {
     }
 
     # x64
-    Copy-Item -Recurse -Force "$PROJECT_DIR\src\bin\Release\net10.0\linux-x64\publish\*" $LINUX_X64_DIR
-    Copy-Item -Force "$PROJECT_DIR\src\Assets\icon.png" $LINUX_X64_DIR -ErrorAction SilentlyContinue
+    Copy-Item -Recurse -Force "$PROJECT_DIR\src\desktop\bin\Release\net10.0\linux-x64\publish\*" $LINUX_X64_DIR
+    Copy-Item -Force "$PROJECT_DIR\src\desktop\Assets\icon.png" $LINUX_X64_DIR -ErrorAction SilentlyContinue
 
     $desktopFile = "$LINUX_X64_DIR\NubeZero.desktop"
     if (Test-Path $desktopFile) {

@@ -40,6 +40,10 @@ jobs:
             arch: arm64
             rid: osx-arm64
             asset_name: NubeZero-arm64.dmg
+          - os: ubuntu-latest
+            arch: android
+            rid: android
+            asset_name: NubeZero.apk
 
     steps:
       - name: Obtener código fuente
@@ -54,15 +58,27 @@ jobs:
         id: get_version
         shell: bash
         run: |
-          VERSION=$(awk -F'[><]' '/<Version>/{print $3}' src/desktop/NubeZero.Desktop.csproj | head -n 1 | tr -d '\r')
+          VERSION=$(awk -F'"' '/public static string Texto/ {gsub(/V/, "", $2); print $2}' src/shared/Version.cs | head -n 1 | tr -d '\r')
           if [ -z "$VERSION" ]; then VERSION="0.0.0"; fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Compilar aplicación
+      - name: Instalar Workloads MAUI
+        if: matrix.rid == 'android'
+        run: dotnet workload install maui-android
+
+      - name: Compilar aplicación (Desktop)
+        if: matrix.rid != 'android'
         run: |
           cd src/desktop
           dotnet publish -c Release -r ${{ matrix.rid }} --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -o publish_out
+
+      - name: Compilar aplicación (Mobile APK)
+        if: matrix.rid == 'android'
+        run: |
+          cd src/mobile
+          dotnet publish -f net10.0-android -c Release -p:AndroidPackageFormat=apk -o publish_out
+          cp publish_out/*-Signed.apk ${{ github.workspace }}/${{ matrix.asset_name }}
 
       # --- EMPAQUETADO WINDOWS ---
       - name: Generar Instalador (Windows)
@@ -99,38 +115,6 @@ jobs:
             echo ERROR: El instalador no se generó en la ubicación esperada.
             exit /b 1
           )
-
-      - name: Generar paquete MSIX (Windows)
-        if: runner.os == 'Windows'
-        shell: cmd
-        run: |
-          @echo on
-          echo Preparando archivos para MSIX...
-          
-          copy "src\Assets\icon.png" "src\publish_out\StoreLogo.png"
-          copy "src\Assets\icon.png" "src\publish_out\Square150x150Logo.png"
-          copy "src\Assets\icon.png" "src\publish_out\Square44x44Logo.png"
-          copy "src\Assets\icon.png" "src\publish_out\SplashScreen.png"
-
-          echo Parseando version para MSIX (debe ser X.Y.Z.0)...
-          for /f "tokens=1,2,3 delims=." %%a in ("${{ env.VERSION }}") do (
-            set MSIX_VERSION=%%a.%%b.%%c.0
-          )
-          if "%MSIX_VERSION%"=="..0" set MSIX_VERSION=1.0.0.0
-          
-          echo Generando AppxManifest.xml...
-          powershell -Command "(Get-Content src\AppxManifest.xml.template) -replace '@VERSION@', $env:MSIX_VERSION -replace '@ARCH@', '${{ matrix.arch }}' | Out-File -Encoding UTF8 src\publish_out\AppxManifest.xml"
-
-          echo Buscando makeappx.exe...
-          set MAKEAPPX_PATH=
-          for /f "delims=" %%i in ('dir /b /s "C:\Program Files (x86)\Windows Kits\10\bin\*makeappx.exe" 2^>nul ^| findstr /i "x64\\makeappx.exe"') do set MAKEAPPX_PATH="%%i"
-          if not defined MAKEAPPX_PATH (
-            echo ERROR: No se encontró makeappx.exe
-            exit /b 1
-          )
-          
-          echo Empaquetando con makeappx...
-          %MAKEAPPX_PATH% pack /d src\publish_out /p "${{ github.workspace }}\NubeZero-${{ matrix.arch }}.msix" /o
 
       # --- EMPAQUETADO LINUX ---
       - name: Preparar AppDir (Linux)

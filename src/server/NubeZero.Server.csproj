@@ -4,6 +4,8 @@
     <OutputType>Exe</OutputType>
     <!-- Multi-target: net472 para la Raspberry Pi, net10.0 para desarrollo local en Mac/PC -->
     <TargetFrameworks>net472;net10.0</TargetFrameworks>
+    <VersionFileContent>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)..\shared\Version.cs'))</VersionFileContent>
+    <Version>$([System.Text.RegularExpressions.Regex]::Match($(VersionFileContent), '(?&lt;= "V?)[0-9\.]+').Value)</Version>
     <LangVersion>latest</LangVersion>
     <!-- Optimizado para Raspberry Pi Zero W (ARMv6) -->
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -15,6 +17,7 @@
 
   <ItemGroup>
     <PackageReference Include="System.Text.Json" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.8" />
   </ItemGroup>
 
 </Project>

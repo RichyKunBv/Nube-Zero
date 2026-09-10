@@ -2,24 +2,127 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shared="clr-namespace:NubeZero.Shared;assembly=NubeZero.Shared"
         x:Class="NubeZero.Desktop.MainWindow"
-        Title="NubeZero Desktop - Pruebas" Width="600" Height="400">
-    <Grid RowDefinitions="Auto, *">
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10" Spacing="10">
-            <Button Name="BtnRefresh" Content="Recargar Archivos" Click="BtnRefresh_Click"/>
-            <TextBlock Name="TxtStatus" VerticalAlignment="Center" Text="Listo" Foreground="Gray"/>
-        </StackPanel>
-        
-        <ListBox Grid.Row="1" Name="LstFiles" Margin="10" 
-                 DragDrop.AllowDrop="True" Background="#1E1E1E">
-            <ListBox.ItemTemplate>
-                <DataTemplate DataType="shared:ArchivoDTO">
-                    <StackPanel Orientation="Horizontal" Spacing="10" Margin="5">
-                        <TextBlock Text="{Binding EsCarpeta, StringFormat='[{0}]'}" Foreground="Cyan"/>
-                        <TextBlock Text="{Binding Nombre}" FontWeight="Bold" Foreground="White"/>
-                        <TextBlock Text="{Binding PesoBytes, StringFormat='({0} bytes)'}" Foreground="LightGray"/>
+        Title="NubeZero" Width="900" Height="600"
+        Background="#121212"
+        TransparencyLevelHint="Mica, AcrylicBlur, None"
+        ExtendClientAreaToDecorationsHint="True"
+        DragDrop.AllowDrop="True"
+        WindowStartupLocation="CenterScreen">
+
+    <Window.Styles>
+        <Style Selector="Button.Fab">
+            <Setter Property="Background" Value="#00D2FF"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="CornerRadius" Value="28"/>
+            <Setter Property="Width" Value="56"/>
+            <Setter Property="Height" Value="56"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="FontSize" Value="24"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2"/>
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.Fab:pointerover">
+            <Setter Property="RenderTransform" Value="scale(1.1)"/>
+            <Setter Property="Background" Value="#3A7BD5"/>
+        </Style>
+        <Style Selector="ListBoxItem">
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Margin" Value="4"/>
+            <Setter Property="Padding" Value="8"/>
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.2"/>
+                </Transitions>
+            </Setter>
+        </Style>
+    </Window.Styles>
+
+    <Grid>
+        <!-- FONDO PRINCIPAL CON GRADIENTE SLEEK -->
+        <Border IsHitTestVisible="False">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                    <GradientStop Offset="0" Color="#1E1E2C"/>
+                    <GradientStop Offset="1" Color="#121212"/>
+                </LinearGradientBrush>
+            </Border.Background>
+        </Border>
+
+        <!-- VISTA PRINCIPAL (Sólo visible si IsLoggedIn = True) -->
+        <Grid Name="MainView" IsVisible="False" RowDefinitions="Auto, *, Auto">
+            
+            <!-- HEADER -->
+            <Border Grid.Row="0" Margin="20,40,20,10" Background="#20FFFFFF" CornerRadius="12" Padding="15">
+                <Grid ColumnDefinitions="*, Auto">
+                    <StackPanel Orientation="Horizontal" Spacing="15" VerticalAlignment="Center">
+                        <TextBlock Text="☁️ Nube-Zero" FontSize="24" FontWeight="Black" Foreground="White" />
+                        <TextBlock Name="TxtStatus" Text="Conectado" VerticalAlignment="Center" Foreground="#A0A0A0" FontSize="14"/>
                     </StackPanel>
-                </DataTemplate>
-            </ListBox.ItemTemplate>
-        </ListBox>
+                    <Button Grid.Column="1" Content="Recargar" Click="BtnRefresh_Click" Background="#30FFFFFF" Foreground="White" CornerRadius="8"/>
+                </Grid>
+            </Border>
+
+            <!-- ZONA DRAG & DROP Y LISTADO -->
+            <Border Grid.Row="1" Margin="20,10" Background="#10FFFFFF" CornerRadius="12" BorderBrush="#20FFFFFF" BorderThickness="1">
+                <Grid>
+                    <TextBlock Name="TxtDragHint" Text="Arrastra tus archivos aquí" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="20" Foreground="#40FFFFFF" FontWeight="Bold" IsVisible="True"/>
+                    <ListBox Name="LstFiles" Background="Transparent" BorderThickness="0" Margin="5">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate DataType="shared:ArchivoDTO">
+                                <Grid ColumnDefinitions="Auto, *, Auto" Margin="5">
+                                    <TextBlock Grid.Column="0" Text="{Binding EsCarpeta, Converter={StaticResource BoolToIconConverter}}" FontSize="24" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                                    
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Nombre}" FontWeight="SemiBold" FontSize="16" Foreground="White"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,2,0,0">
+                                            <TextBlock Text="{Binding PesoBytes, Converter={StaticResource BytesToSizeConverter}}" FontSize="12" Foreground="#A0A0A0"/>
+                                            <TextBlock Text="•" Foreground="#606060"/>
+                                            <TextBlock Text="{Binding FechaModificacion, StringFormat='dd/MM/yyyy HH:mm'}" FontSize="12" Foreground="#A0A0A0"/>
+                                            <TextBlock Text="•" Foreground="#606060"/>
+                                            <TextBlock Text="{Binding ModificadoPor, StringFormat='Subido por: {0}'}" FontSize="12" Foreground="#00D2FF"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                    
+                                    <Button Grid.Column="2" Content="⋮" Background="Transparent" Foreground="White" FontSize="20" VerticalAlignment="Center" CornerRadius="15">
+                                        <Button.Flyout>
+                                            <MenuFlyout>
+                                                <MenuItem Header="📥 Descargar" Click="BtnDownload_Click"/>
+                                                <MenuItem Header="🗑️ Eliminar" Click="BtnDelete_Click" Foreground="#FF5555"/>
+                                            </MenuFlyout>
+                                        </Button.Flyout>
+                                    </Button>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+
+            <!-- BOTÓN FLOTANTE (FAB) -->
+            <Button Grid.Row="1" Classes="Fab" Content="+" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,30,30" Click="BtnUploadManual_Click"/>
+        </Grid>
+
+        <!-- PANTALLA DE LOGIN OVERLAY -->
+        <Grid Name="LoginView" IsVisible="True" Background="#E60A0A0A">
+            <Border Background="#20FFFFFF" BorderBrush="#30FFFFFF" BorderThickness="1" CornerRadius="16" Width="350" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="30">
+                <StackPanel Spacing="20">
+                    <TextBlock Text="☁️ Nube-Zero" FontSize="28" FontWeight="Black" HorizontalAlignment="Center" Foreground="White"/>
+                    <TextBlock Text="Inicia sesión para continuar" HorizontalAlignment="Center" Foreground="#A0A0A0" Margin="0,0,0,10"/>
+                    
+                    <TextBox Name="TxtUser" PlaceholderText="Usuario" Background="#10FFFFFF" Foreground="White" CornerRadius="8" Padding="10"/>
+                    <TextBox Name="TxtPassword" PlaceholderText="Contraseña" PasswordChar="•" Background="#10FFFFFF" Foreground="White" CornerRadius="8" Padding="10"/>
+                    
+                    <TextBlock Name="TxtLoginError" Foreground="#FF5555" HorizontalAlignment="Center" IsVisible="False"/>
+                    
+                    <Button Content="Conectar" Click="BtnLogin_Click" Background="#00D2FF" Foreground="White" FontWeight="Bold" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" CornerRadius="8" Padding="10" Margin="0,10,0,0"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
     </Grid>
 </Window>

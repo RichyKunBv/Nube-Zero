@@ -4,6 +4,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using NubeZero.Server.Services;
 using NubeZero.Server.Controllers;
+using NubeZero.Server.Data;
+using NubeZero.Server.Auth;
 
 namespace NubeZero.Server
 {
@@ -11,13 +13,19 @@ namespace NubeZero.Server
     {
         private static StorageService _storageService;
         private static FileController _fileController;
+        private static DatabaseContext _dbContext;
+        private static AuthController _authController;
+        private static AuthInterceptor _authInterceptor;
 
         static async Task Main(string[] args)
         {
             Console.WriteLine("Iniciando servidor Nube-Zero en Raspberry Pi Zero W...");
             
             _storageService = new StorageService();
-            _fileController = new FileController(_storageService);
+            _dbContext = new DatabaseContext();
+            _authController = new AuthController(_dbContext);
+            _authInterceptor = new AuthInterceptor(_dbContext);
+            _fileController = new FileController(_storageService, _dbContext);
             
             using (HttpListener listener = new HttpListener())
             {
@@ -59,6 +67,33 @@ namespace NubeZero.Server
             {
                 Console.WriteLine($"[{request.HttpMethod}] {request.Url.AbsolutePath}");
                 response.AppendHeader("Access-Control-Allow-Origin", "*");
+                
+                // Manejo de pre-flight CORS
+                if (request.HttpMethod == "OPTIONS")
+                {
+                    response.AppendHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+                    response.AppendHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+                    response.StatusCode = 204;
+                    response.Close();
+                    return;
+                }
+
+                if (request.Url.AbsolutePath == "/api/login")
+                {
+                    await _authController.HandleLoginAsync(context);
+                    return;
+                }
+
+                string username = null;
+                if (request.Url.AbsolutePath.StartsWith("/api/") && request.Url.AbsolutePath != "/api/status")
+                {
+                    username = _authInterceptor.ValidateRequest(request);
+                    if (username == null)
+                    {
+                        await _authInterceptor.WriteUnauthorizedAsync(response);
+                        return;
+                    }
+                }
 
                 // Obtener el path del querystring. Ej: /api/files?path=/mi_foto.jpg
                 string reqPath = request.QueryString["path"] ?? "";
@@ -73,7 +108,7 @@ namespace NubeZero.Server
                 }
                 else if (request.Url.AbsolutePath == "/api/upload" && request.HttpMethod == "POST")
                 {
-                    await _fileController.HandleUploadAsync(context, reqPath);
+                    await _fileController.HandleUploadAsync(context, reqPath, username);
                 }
                 else if (request.Url.AbsolutePath == "/api/delete" && request.HttpMethod == "DELETE")
                 {
@@ -92,7 +127,7 @@ namespace NubeZero.Server
                 {
                     response.ContentType = "application/json";
                     response.StatusCode = 200;
-                    byte[] buffer = System.Text.Encoding.UTF8.GetBytes("{\"status\": \"online\", \"version\": \"1.0\"}");
+                    byte[] buffer = System.Text.Encoding.UTF8.GetBytes($"{{\"status\": \"online\", \"version\": \"{NubeZero.Shared.AppVersion.Texto}\"}}");
                     await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
                     response.Close();
                 }
