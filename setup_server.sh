@@ -35,6 +35,14 @@ function print_warn() {
 
 function install_dependencies() {
   print_msg "Verificando e instalando dependencias (curl, unzip, mono, msbuild)..."
+  
+  # Limpiar repositorios problemáticos de Mono si fueron agregados por versiones anteriores
+  if [ -f /etc/apt/sources.list.d/mono-official-stable.list ]; then
+      print_warn "Removiendo repositorio de Mono roto de tu sistema..."
+      rm -f /etc/apt/sources.list.d/mono-official-stable.list
+      rm -f /etc/apt/keyrings/mono-official-archive-keyring.gpg
+  fi
+  
   apt-get update -y
   apt-get install -y curl unzip
   
