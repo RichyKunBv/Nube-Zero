@@ -95,7 +95,7 @@ jobs:
         if: matrix.rid == 'android' # Aprovechamos el runner de Ubuntu para compilar el server 1 sola vez
         run: |
           cd src/server
-          dotnet publish -c Release -f net472 -o publish_out
+          dotnet publish -c Release -f net472 -r linux-arm -o publish_out
           cd publish_out
           zip -r ${{ github.workspace }}/NubeZero-Server.zip *
 
