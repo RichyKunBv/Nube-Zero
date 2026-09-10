@@ -36,12 +36,16 @@ function print_warn() {
 function install_dependencies() {
   print_msg "Verificando e instalando dependencias (curl, unzip, mono, msbuild)..."
   
-  # Limpiar repositorios problemáticos de Mono si fueron agregados por versiones anteriores
-  if [ -f /etc/apt/sources.list.d/mono-official-stable.list ]; then
-      print_warn "Removiendo repositorio de Mono roto de tu sistema..."
-      rm -f /etc/apt/sources.list.d/mono-official-stable.list
-      rm -f /etc/apt/keyrings/mono-official-archive-keyring.gpg
-  fi
+  # Limpiar repositorios problemáticos de Mono si fueron agregados por versiones anteriores o tutoriales viejos
+  print_warn "Buscando y deshabilitando repositorios rotos de Mono en el sistema..."
+  grep -rl "download.mono-project.com" /etc/apt/ | while read -r file; do
+      if [ -f "$file" ]; then
+          echo "Comentando repo inválido en: $file"
+          sed -i 's/^deb .*download.mono-project.com/# &/' "$file"
+      fi
+  done
+  
+  rm -f /etc/apt/keyrings/mono-official-archive-keyring.gpg
   
   apt-get update -y
   apt-get install -y curl unzip
