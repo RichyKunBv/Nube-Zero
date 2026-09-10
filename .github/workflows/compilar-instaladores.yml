@@ -54,6 +54,13 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Configurar Java 17 (Android)
+        if: matrix.rid == 'android'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'microsoft'
+          java-version: '17'
+
       - name: Obtener Versión
         id: get_version
         shell: bash
@@ -78,7 +85,11 @@ jobs:
         run: |
           cd src/mobile
           dotnet publish -f net10.0-android -c Release -p:AndroidPackageFormat=apk -o publish_out
-          cp publish_out/*-Signed.apk ${{ github.workspace }}/${{ matrix.asset_name }}
+          APK_FILE=$(find publish_out -name "*-Signed.apk" | head -n 1)
+          if [ -z "$APK_FILE" ]; then
+            APK_FILE=$(find publish_out -name "*.apk" | head -n 1)
+          fi
+          cp "$APK_FILE" ${{ github.workspace }}/${{ matrix.asset_name }}
 
       # --- EMPAQUETADO WINDOWS ---
       - name: Generar Instalador (Windows)
@@ -87,7 +98,7 @@ jobs:
         run: |
           @echo on
           echo Eliminando .pdb...
-          del /q /s "src\publish_out\*.pdb" 2>nul || ver>nul
+          del /q /s "src\desktop\publish_out\*.pdb" 2>nul || ver>nul
 
           if not exist "C:\PROGRA~2\NSIS\makensis.exe" (
             echo Instalando NSIS...
@@ -107,7 +118,7 @@ jobs:
           )
 
           echo Ejecutando NSIS...
-          "C:\PROGRA~2\NSIS\makensis.exe" /DARCH=${{ matrix.arch }} /DVERSION="${{ env.VERSION }}" "/DPUBLISH_DIR=${{ github.workspace }}\src\publish_out" "/DOUTFILE=${{ github.workspace }}\${{ matrix.asset_name }}" scripts\build\installer.nsi
+          "C:\PROGRA~2\NSIS\makensis.exe" /DARCH=${{ matrix.arch }} /DVERSION="${{ env.VERSION }}" "/DPUBLISH_DIR=${{ github.workspace }}\src\desktop\publish_out" "/DOUTFILE=${{ github.workspace }}\${{ matrix.asset_name }}" scripts\build\installer.nsi
 
           echo Verificando instalador en la raíz...
           dir "${{ github.workspace }}\${{ matrix.asset_name }}"
@@ -118,8 +129,9 @@ jobs:
 
       # --- EMPAQUETADO LINUX ---
       - name: Preparar AppDir (Linux)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.rid != 'android'
         run: |
+          sudo apt-get update && sudo apt-get install -y libfuse2
           mkdir -p AppDir/usr/bin
           mkdir -p AppDir/usr/share/applications
           mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
