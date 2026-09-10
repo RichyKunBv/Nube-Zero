@@ -93,14 +93,15 @@ function fetch_and_install() {
   fi
   
   # Hack para ARMv6 (Raspberry Pi Zero):
-  # El libe_sqlite3.so que viene pre-compilado en .NET es para ARMv7.
-  # Causará un crash "DllNotFoundException" al intentar cargarse en ARMv6.
-  # La solución es hacer un symlink hacia la librería nativa de Raspbian que SÍ es ARMv6.
+  # Microsoft.Data.Sqlite intentará cargar libsqlite3.so (nuestro nuevo proveedor).
+  # Hacemos un symlink hacia la librería nativa de Raspbian que SÍ es ARMv6 y eliminamos la ARMv7.
   print_msg "Aplicando parche de compatibilidad SQLite para ARMv6..."
+  rm -f "$BIN_DIR/libe_sqlite3.so"
+  rm -rf "$BIN_DIR/runtimes"
   SYSTEM_SQLITE=$(find /usr/lib -name "libsqlite3.so.0" | head -n 1)
   if [ -n "$SYSTEM_SQLITE" ]; then
-      echo "Enlazando $SYSTEM_SQLITE -> $BIN_DIR/libe_sqlite3.so"
-      ln -sf "$SYSTEM_SQLITE" "$BIN_DIR/libe_sqlite3.so"
+      echo "Enlazando $SYSTEM_SQLITE -> $BIN_DIR/libsqlite3.so"
+      ln -sf "$SYSTEM_SQLITE" "$BIN_DIR/libsqlite3.so"
   else
       print_warn "No se encontró libsqlite3.so.0 en el sistema. Podría haber errores de base de datos."
   fi
