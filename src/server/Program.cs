@@ -19,7 +19,13 @@ namespace NubeZero.Server
 
         static async Task Main(string[] args)
         {
-            Console.WriteLine("Iniciando servidor Nube-Zero en Raspberry Pi Zero W...");
+            int port = 8080;
+            if (args.Length >= 2 && args[0] == "--port" && int.TryParse(args[1], out int p))
+            {
+                port = p;
+            }
+
+            Console.WriteLine($"Iniciando servidor Nube-Zero en el puerto {port}...");
             
             _storageService = new StorageService();
             _dbContext = new DatabaseContext();
@@ -29,9 +35,9 @@ namespace NubeZero.Server
             
             using (HttpListener listener = new HttpListener())
             {
-                listener.Prefixes.Add("http://+:8080/");
+                listener.Prefixes.Add($"http://+:{port}/");
                 listener.Start();
-                Console.WriteLine("Servidor escuchando en el puerto 8080...");
+                Console.WriteLine($"Servidor escuchando en el puerto {port}...");
                 Console.WriteLine($"Directorio de almacenamiento: {_storageService.BasePath}");
 
                 var cts = new CancellationTokenSource();
