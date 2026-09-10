@@ -1,5 +1,5 @@
 [Desktop Entry]
-Version=1.0.0
+Version=1.5
 Name=Nube-Zero
 Comment=Cliente de escritorio para Nube-Zero
 Exec=NubeZero.Desktop %U
