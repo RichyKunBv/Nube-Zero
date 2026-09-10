@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/desktop/">
+    <Project Path="src/desktop/NubeZero.Desktop.csproj" />
+  </Folder>
+  <Folder Name="/src/mobile/">
+    <Project Path="src/mobile/NubeZero.Mobile.csproj" />
+  </Folder>
+  <Folder Name="/src/server/">
+    <Project Path="src/server/NubeZero.Server.csproj" />
+  </Folder>
+  <Folder Name="/src/shared/">
+    <Project Path="src/shared/NubeZero.Shared.csproj" />
+  </Folder>
+</Solution>

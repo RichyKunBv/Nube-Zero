@@ -1,0 +1,277 @@
+name: Generar Instaladores Multiplataforma
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-package:
+    name: Empaquetar ${{ matrix.rid }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            arch: x64
+            rid: win-x64
+            asset_name: Ultraudio-x64.exe
+          - os: windows-latest
+            arch: arm64
+            rid: win-arm64
+            asset_name: Ultraudio-arm64.exe
+          - os: ubuntu-latest
+            arch: x64
+            rid: linux-x64
+            asset_name: Ultraudio-x64.AppImage
+          - os: ubuntu-latest
+            arch: arm64
+            rid: linux-arm64
+            asset_name: Ultraudio-arm64.AppImage
+          - os: macos-latest
+            arch: x64
+            rid: osx-x64
+            asset_name: Ultraudio-x64.dmg
+          - os: macos-latest
+            arch: arm64
+            rid: osx-arm64
+            asset_name: Ultraudio-arm64.dmg
+
+    steps:
+      - name: Obtener código fuente
+        uses: actions/checkout@v5
+
+      - name: Instalar .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Obtener Versión
+        id: get_version
+        shell: bash
+        run: |
+          VERSION=$(awk -F'[><]' '/<Version>/{print $3}' src/Ultraudio.csproj | head -n 1 | tr -d '\r')
+          if [ -z "$VERSION" ]; then VERSION="0.0.0"; fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Compilar aplicación
+        run: |
+          cd src
+          dotnet publish -c Release -r ${{ matrix.rid }} --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -o publish_out
+
+      # --- EMPAQUETADO WINDOWS ---
+      - name: Generar Instalador (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          @echo on
+          echo Eliminando .pdb...
+          del /q /s "src\publish_out\*.pdb" 2>nul || ver>nul
+
+          if not exist "C:\PROGRA~2\NSIS\makensis.exe" (
+            echo Instalando NSIS...
+            choco install nsis -y
+          )
+
+          echo Verificando makensis.exe...
+          if not exist "C:\PROGRA~2\NSIS\makensis.exe" (
+            echo ERROR: No se encontró makensis.exe
+            exit /b 1
+          )
+
+          echo Verificando script NSIS...
+          if not exist "scripts\build\installer.nsi" (
+            echo ERROR: El archivo scripts\build\installer.nsi no existe.
+            exit /b 1
+          )
+
+          echo Ejecutando NSIS...
+          "C:\PROGRA~2\NSIS\makensis.exe" /DARCH=${{ matrix.arch }} /DVERSION="${{ env.VERSION }}" "/DPUBLISH_DIR=${{ github.workspace }}\src\publish_out" "/DOUTFILE=${{ github.workspace }}\${{ matrix.asset_name }}" scripts\build\installer.nsi
+
+          echo Verificando instalador en la raíz...
+          dir "${{ github.workspace }}\${{ matrix.asset_name }}"
+          if not exist "${{ github.workspace }}\${{ matrix.asset_name }}" (
+            echo ERROR: El instalador no se generó en la ubicación esperada.
+            exit /b 1
+          )
+
+      - name: Generar paquete MSIX (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          @echo on
+          echo Preparando archivos para MSIX...
+          
+          copy "src\Assets\icon.png" "src\publish_out\StoreLogo.png"
+          copy "src\Assets\icon.png" "src\publish_out\Square150x150Logo.png"
+          copy "src\Assets\icon.png" "src\publish_out\Square44x44Logo.png"
+          copy "src\Assets\icon.png" "src\publish_out\SplashScreen.png"
+
+          echo Parseando version para MSIX (debe ser X.Y.Z.0)...
+          for /f "tokens=1,2,3 delims=." %%a in ("${{ env.VERSION }}") do (
+            set MSIX_VERSION=%%a.%%b.%%c.0
+          )
+          if "%MSIX_VERSION%"=="..0" set MSIX_VERSION=1.0.0.0
+          
+          echo Generando AppxManifest.xml...
+          powershell -Command "(Get-Content src\AppxManifest.xml.template) -replace '@VERSION@', $env:MSIX_VERSION -replace '@ARCH@', '${{ matrix.arch }}' | Out-File -Encoding UTF8 src\publish_out\AppxManifest.xml"
+
+          echo Buscando makeappx.exe...
+          set MAKEAPPX_PATH=
+          for /f "delims=" %%i in ('dir /b /s "C:\Program Files (x86)\Windows Kits\10\bin\*makeappx.exe" 2^>nul ^| findstr /i "x64\\makeappx.exe"') do set MAKEAPPX_PATH="%%i"
+          if not defined MAKEAPPX_PATH (
+            echo ERROR: No se encontró makeappx.exe
+            exit /b 1
+          )
+          
+          echo Empaquetando con makeappx...
+          %MAKEAPPX_PATH% pack /d src\publish_out /p "${{ github.workspace }}\Ultraudio-${{ matrix.arch }}.msix" /o
+
+      # --- EMPAQUETADO LINUX ---
+      - name: Preparar AppDir (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          
+          cp -r src/publish_out/* AppDir/usr/bin/
+          chmod +x AppDir/usr/bin/Ultraudio
+          
+          cp src/Assets/icon.png AppDir/usr/share/icons/hicolor/256x256/apps/Ultraudio.png
+          cp src/Assets/icon.png AppDir/Ultraudio.png
+          
+          cp src/Ultraudio.desktop AppDir/usr/share/applications/
+          cp src/Ultraudio.desktop AppDir/
+          sed -i "s/^Exec=.*/Exec=Ultraudio/" AppDir/usr/share/applications/Ultraudio.desktop
+          sed -i "s/^Exec=.*/Exec=Ultraudio/" AppDir/Ultraudio.desktop
+          sed -i "s/^Icon=.*/Icon=Ultraudio/" AppDir/usr/share/applications/Ultraudio.desktop
+          sed -i "s/^Icon=.*/Icon=Ultraudio/" AppDir/Ultraudio.desktop
+
+      - name: Generar AppImage (Linux x64)
+        if: runner.os == 'Linux' && matrix.arch == 'x64'
+        run: |
+          cat << 'EOF' > AppDir/AppRun
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "${0}")")"
+          exec "${HERE}/usr/bin/Ultraudio" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+          wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          export UPDATE_INFORMATION=""
+          ./appimagetool-x86_64.AppImage AppDir ${{ matrix.asset_name }} || ./appimagetool-x86_64.AppImage AppDir ${{ matrix.asset_name }} -n
+
+      - name: Generar AppImage (Linux arm64)
+        if: runner.os == 'Linux' && matrix.arch == 'arm64'
+        run: |
+          cat << 'EOF' > AppDir/AppRun
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "${0}")")"
+          exec "${HERE}/usr/bin/Ultraudio" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+          wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+          wget https://github.com/AppImage/AppImageKit/releases/download/continuous/runtime-aarch64
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          export ARCH=aarch64
+          ./appimagetool-x86_64.AppImage --runtime-file runtime-aarch64 AppDir ${{ matrix.asset_name }} || ./appimagetool-x86_64.AppImage --runtime-file runtime-aarch64 AppDir ${{ matrix.asset_name }} -n
+
+
+      # --- EMPAQUETADO MACOS ---
+      - name: Preparar App Bundle (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          APP_DIR="Ultraudio.app"
+          mkdir -p "$APP_DIR/Contents/MacOS"
+          mkdir -p "$APP_DIR/Contents/Resources"
+          
+          cp -a src/publish_out/. "$APP_DIR/Contents/MacOS/"
+          
+          cp src/Assets/icon.icns "$APP_DIR/Contents/Resources/" || true
+          cp src/Info.plist.template "$APP_DIR/Contents/Info.plist"
+          
+          plutil -replace CFBundleVersion -string "${{ env.VERSION }}" "$APP_DIR/Contents/Info.plist"
+          plutil -replace CFBundleShortVersionString -string "${{ env.VERSION }}" "$APP_DIR/Contents/Info.plist"
+          plutil -replace CFBundleExecutable -string "Ultraudio" "$APP_DIR/Contents/Info.plist"
+          plutil -replace CFBundleIconFile -string "icon.icns" "$APP_DIR/Contents/Info.plist"
+          plutil -replace CFBundleIdentifier -string "com.esmesolutions.ultraudio" "$APP_DIR/Contents/Info.plist"
+          
+          xattr -cr "$APP_DIR"
+          codesign --force --deep --sign - "$APP_DIR"
+
+      - name: Generar DMG (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install create-dmg
+          
+          create-dmg \
+            --volname "Ultraudio" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "Ultraudio.app" 150 150 \
+            --hide-extension "Ultraudio.app" \
+            --app-drop-link 450 150 \
+            "${{ matrix.asset_name }}" \
+            "Ultraudio.app"
+
+      # --- SUBIR RESULTADO ---
+      - name: Subir Archivos a GitHub Releases
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v3
+        with:
+          files: ${{ github.workspace }}/Ultraudio*
+          
+      - name: Subir Artefacto temporal para Pages
+        if: github.event_name == 'release' && runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-windows-${{ matrix.arch }}
+          path: ${{ github.workspace }}/${{ matrix.asset_name }}
+          retention-days: 1
+          
+      - name: Subir Artefactos para PR o Manual
+        if: github.event_name != 'release'
+        uses: actions/upload-artifact@v5
+        with:
+          name: installers-${{ matrix.rid }}
+          path: ${{ github.workspace }}/Ultraudio*
+
+      # 🔹 Debug: Si falla, subimos la carpeta de compilación para inspeccionar
+      - name: Subir artefactos de compilación (debug)
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: debug-${{ matrix.rid }}
+          path: src/publish_out
+
+  deploy-pages:
+    name: Publicar Instaladores en GitHub Pages
+    needs: build-and-package
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    permissions:
+      contents: write
+    steps:
+      - name: Descargar instaladores de Windows
+        uses: actions/download-artifact@v4
+        with:
+          path: public-installers
+          pattern: installers-windows-*
+          merge-multiple: true
+
+      - name: Publicar en GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public-installers
+          keep_files: false
+          force_orphan: true
