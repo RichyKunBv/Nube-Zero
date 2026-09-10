@@ -110,7 +110,7 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=$INSTALL_DIR
-ExecStart=/usr/bin/mono $BIN_DIR/NubeZero.exe --port $port
+ExecStart=/usr/bin/mono $BIN_DIR/NubeZero.Server.exe --port $port
 Restart=always
 RestartSec=10
 
