@@ -137,7 +137,21 @@ jobs:
           mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
           
           cp -r src/desktop/publish_out/* AppDir/usr/bin/
-          chmod +x AppDir/usr/bin/NubeZero
+          
+          # Buscar el binario real dinámicamente y darle permisos
+          BINARY=$(find AppDir/usr/bin -maxdepth 1 -type f ! -name "*.so*" ! -name "*.dll" ! -name "*.dbg" | head -n 1)
+          if [ -z "$BINARY" ]; then
+            echo "ERROR: No se encontró ningún binario en AppDir/usr/bin/"
+            ls -la AppDir/usr/bin/
+            exit 1
+          fi
+          chmod +x "$BINARY"
+          
+          # Crear symlink si el binario no se llama NubeZero
+          BINARY_NAME=$(basename "$BINARY")
+          if [ "$BINARY_NAME" != "NubeZero" ]; then
+            ln -s "$BINARY_NAME" AppDir/usr/bin/NubeZero
+          fi
           
           cp src/desktop/Assets/icon.png AppDir/usr/share/icons/hicolor/256x256/apps/NubeZero.png
           cp src/desktop/Assets/icon.png AppDir/NubeZero.png
