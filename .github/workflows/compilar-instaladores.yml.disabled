@@ -19,27 +19,27 @@ jobs:
           - os: windows-latest
             arch: x64
             rid: win-x64
-            asset_name: Ultraudio-x64.exe
+            asset_name: NubeZero-x64.exe
           - os: windows-latest
             arch: arm64
             rid: win-arm64
-            asset_name: Ultraudio-arm64.exe
+            asset_name: NubeZero-arm64.exe
           - os: ubuntu-latest
             arch: x64
             rid: linux-x64
-            asset_name: Ultraudio-x64.AppImage
+            asset_name: NubeZero-x64.AppImage
           - os: ubuntu-latest
             arch: arm64
             rid: linux-arm64
-            asset_name: Ultraudio-arm64.AppImage
+            asset_name: NubeZero-arm64.AppImage
           - os: macos-latest
             arch: x64
             rid: osx-x64
-            asset_name: Ultraudio-x64.dmg
+            asset_name: NubeZero-x64.dmg
           - os: macos-latest
             arch: arm64
             rid: osx-arm64
-            asset_name: Ultraudio-arm64.dmg
+            asset_name: NubeZero-arm64.dmg
 
     steps:
       - name: Obtener código fuente
@@ -54,14 +54,14 @@ jobs:
         id: get_version
         shell: bash
         run: |
-          VERSION=$(awk -F'[><]' '/<Version>/{print $3}' src/Ultraudio.csproj | head -n 1 | tr -d '\r')
+          VERSION=$(awk -F'[><]' '/<Version>/{print $3}' src/desktop/NubeZero.Desktop.csproj | head -n 1 | tr -d '\r')
           if [ -z "$VERSION" ]; then VERSION="0.0.0"; fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Compilar aplicación
         run: |
-          cd src
+          cd src/desktop
           dotnet publish -c Release -r ${{ matrix.rid }} --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -o publish_out
 
       # --- EMPAQUETADO WINDOWS ---
@@ -130,7 +130,7 @@ jobs:
           )
           
           echo Empaquetando con makeappx...
-          %MAKEAPPX_PATH% pack /d src\publish_out /p "${{ github.workspace }}\Ultraudio-${{ matrix.arch }}.msix" /o
+          %MAKEAPPX_PATH% pack /d src\publish_out /p "${{ github.workspace }}\NubeZero-${{ matrix.arch }}.msix" /o
 
       # --- EMPAQUETADO LINUX ---
       - name: Preparar AppDir (Linux)
@@ -140,18 +140,18 @@ jobs:
           mkdir -p AppDir/usr/share/applications
           mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
           
-          cp -r src/publish_out/* AppDir/usr/bin/
-          chmod +x AppDir/usr/bin/Ultraudio
+          cp -r src/desktop/publish_out/* AppDir/usr/bin/
+          chmod +x AppDir/usr/bin/NubeZero
           
-          cp src/Assets/icon.png AppDir/usr/share/icons/hicolor/256x256/apps/Ultraudio.png
-          cp src/Assets/icon.png AppDir/Ultraudio.png
+          cp src/desktop/Assets/icon.png AppDir/usr/share/icons/hicolor/256x256/apps/NubeZero.png
+          cp src/desktop/Assets/icon.png AppDir/NubeZero.png
           
-          cp src/Ultraudio.desktop AppDir/usr/share/applications/
-          cp src/Ultraudio.desktop AppDir/
-          sed -i "s/^Exec=.*/Exec=Ultraudio/" AppDir/usr/share/applications/Ultraudio.desktop
-          sed -i "s/^Exec=.*/Exec=Ultraudio/" AppDir/Ultraudio.desktop
-          sed -i "s/^Icon=.*/Icon=Ultraudio/" AppDir/usr/share/applications/Ultraudio.desktop
-          sed -i "s/^Icon=.*/Icon=Ultraudio/" AppDir/Ultraudio.desktop
+          cp src/desktop/NubeZero.desktop AppDir/usr/share/applications/
+          cp src/desktop/NubeZero.desktop AppDir/
+          sed -i "s/^Exec=.*/Exec=NubeZero/" AppDir/usr/share/applications/NubeZero.desktop
+          sed -i "s/^Exec=.*/Exec=NubeZero/" AppDir/NubeZero.desktop
+          sed -i "s/^Icon=.*/Icon=NubeZero/" AppDir/usr/share/applications/NubeZero.desktop
+          sed -i "s/^Icon=.*/Icon=NubeZero/" AppDir/NubeZero.desktop
 
       - name: Generar AppImage (Linux x64)
         if: runner.os == 'Linux' && matrix.arch == 'x64'
@@ -159,7 +159,7 @@ jobs:
           cat << 'EOF' > AppDir/AppRun
           #!/bin/sh
           HERE="$(dirname "$(readlink -f "${0}")")"
-          exec "${HERE}/usr/bin/Ultraudio" "$@"
+          exec "${HERE}/usr/bin/NubeZero" "$@"
           EOF
           chmod +x AppDir/AppRun
           wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
@@ -174,7 +174,7 @@ jobs:
           cat << 'EOF' > AppDir/AppRun
           #!/bin/sh
           HERE="$(dirname "$(readlink -f "${0}")")"
-          exec "${HERE}/usr/bin/Ultraudio" "$@"
+          exec "${HERE}/usr/bin/NubeZero" "$@"
           EOF
           chmod +x AppDir/AppRun
           wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
@@ -189,20 +189,20 @@ jobs:
       - name: Preparar App Bundle (macOS)
         if: runner.os == 'macOS'
         run: |
-          APP_DIR="Ultraudio.app"
+          APP_DIR="NubeZero.app"
           mkdir -p "$APP_DIR/Contents/MacOS"
           mkdir -p "$APP_DIR/Contents/Resources"
           
-          cp -a src/publish_out/. "$APP_DIR/Contents/MacOS/"
+          cp -a src/desktop/publish_out/. "$APP_DIR/Contents/MacOS/"
           
-          cp src/Assets/icon.icns "$APP_DIR/Contents/Resources/" || true
-          cp src/Info.plist.template "$APP_DIR/Contents/Info.plist"
+          cp src/desktop/Assets/icon.icns "$APP_DIR/Contents/Resources/" || true
+          cp src/desktop/Info.plist.template "$APP_DIR/Contents/Info.plist"
           
           plutil -replace CFBundleVersion -string "${{ env.VERSION }}" "$APP_DIR/Contents/Info.plist"
           plutil -replace CFBundleShortVersionString -string "${{ env.VERSION }}" "$APP_DIR/Contents/Info.plist"
-          plutil -replace CFBundleExecutable -string "Ultraudio" "$APP_DIR/Contents/Info.plist"
+          plutil -replace CFBundleExecutable -string "NubeZero" "$APP_DIR/Contents/Info.plist"
           plutil -replace CFBundleIconFile -string "icon.icns" "$APP_DIR/Contents/Info.plist"
-          plutil -replace CFBundleIdentifier -string "com.esmesolutions.ultraudio" "$APP_DIR/Contents/Info.plist"
+          plutil -replace CFBundleIdentifier -string "com.esmesolutions.nubezero" "$APP_DIR/Contents/Info.plist"
           
           xattr -cr "$APP_DIR"
           codesign --force --deep --sign - "$APP_DIR"
@@ -213,22 +213,22 @@ jobs:
           brew install create-dmg
           
           create-dmg \
-            --volname "Ultraudio" \
+            --volname "NubeZero" \
             --window-pos 200 120 \
             --window-size 600 400 \
             --icon-size 100 \
-            --icon "Ultraudio.app" 150 150 \
-            --hide-extension "Ultraudio.app" \
+            --icon "NubeZero.app" 150 150 \
+            --hide-extension "NubeZero.app" \
             --app-drop-link 450 150 \
             "${{ matrix.asset_name }}" \
-            "Ultraudio.app"
+            "NubeZero.app"
 
       # --- SUBIR RESULTADO ---
       - name: Subir Archivos a GitHub Releases
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v3
         with:
-          files: ${{ github.workspace }}/Ultraudio*
+          files: ${{ github.workspace }}/NubeZero*
           
       - name: Subir Artefacto temporal para Pages
         if: github.event_name == 'release' && runner.os == 'Windows'
@@ -243,7 +243,7 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: installers-${{ matrix.rid }}
-          path: ${{ github.workspace }}/Ultraudio*
+          path: ${{ github.workspace }}/NubeZero*
 
       # 🔹 Debug: Si falla, subimos la carpeta de compilación para inspeccionar
       - name: Subir artefactos de compilación (debug)
@@ -251,7 +251,7 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: debug-${{ matrix.rid }}
-          path: src/publish_out
+          path: src/desktop/publish_out
 
   deploy-pages:
     name: Publicar Instaladores en GitHub Pages

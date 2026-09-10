@@ -2,16 +2,19 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <!-- Usando .NET Framework 4.7.2 para compatibilidad total con Mono en Linux -->
-    <TargetFramework>net472</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
+    <!-- Multi-target: net472 para la Raspberry Pi, net10.0 para desarrollo local en Mac/PC -->
+    <TargetFrameworks>net472;net10.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
     <!-- Optimizado para Raspberry Pi Zero W (ARMv6) -->
     <PlatformTarget>AnyCPU</PlatformTarget>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\shared\NubeZero.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="10.0.12" />
   </ItemGroup>
 
 </Project>

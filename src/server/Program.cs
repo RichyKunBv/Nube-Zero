@@ -2,45 +2,47 @@ using System;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
+using NubeZero.Server.Services;
+using NubeZero.Server.Controllers;
 
 namespace NubeZero.Server
 {
     class Program
     {
+        private static StorageService _storageService;
+        private static FileController _fileController;
+
         static async Task Main(string[] args)
         {
             Console.WriteLine("Iniciando servidor Nube-Zero en Raspberry Pi Zero W...");
             
+            _storageService = new StorageService();
+            _fileController = new FileController(_storageService);
+            
             using (HttpListener listener = new HttpListener())
             {
-                // Usar "+" en Windows o "*" en Linux/Mono para bindear a todas las interfaces
                 listener.Prefixes.Add("http://+:8080/");
                 listener.Start();
                 Console.WriteLine("Servidor escuchando en el puerto 8080...");
+                Console.WriteLine($"Directorio de almacenamiento: {_storageService.BasePath}");
 
                 var cts = new CancellationTokenSource();
                 Console.CancelKeyPress += (s, e) =>
                 {
                     Console.WriteLine("Apagando servidor...");
                     cts.Cancel();
-                    e.Cancel = true; // Previene que el proceso muera inmediatamente
+                    e.Cancel = true;
                 };
 
                 try
                 {
                     while (!cts.IsCancellationRequested)
                     {
-                        // Esperar asíncronamente la siguiente conexión
                         var context = await listener.GetContextAsync();
-                        
-                        // Derivar a un Task sin bloquear el hilo principal
                         _ = Task.Run(() => HandleRequestAsync(context), cts.Token);
                     }
                 }
-                catch (HttpListenerException)
-                {
-                    // Ocurre al cancelar/cerrar el listener
-                }
+                catch (HttpListenerException) { }
                 finally
                 {
                     listener.Stop();
@@ -50,47 +52,62 @@ namespace NubeZero.Server
 
         static async Task HandleRequestAsync(HttpListenerContext context)
         {
+            var request = context.Request;
+            var response = context.Response;
+
             try
             {
-                var request = context.Request;
-                var response = context.Response;
-
                 Console.WriteLine($"[{request.HttpMethod}] {request.Url.AbsolutePath}");
-
-                response.ContentType = "application/json";
                 response.AppendHeader("Access-Control-Allow-Origin", "*");
 
-                if (request.HttpMethod == "GET" && request.Url.AbsolutePath == "/api/status")
+                // Obtener el path del querystring. Ej: /api/files?path=/mi_foto.jpg
+                string reqPath = request.QueryString["path"] ?? "";
+
+                if (request.Url.AbsolutePath == "/api/files" && request.HttpMethod == "GET")
                 {
-                    string jsonResponse = "{\"status\": \"online\", \"message\": \"Nube-Zero Server corriendo\"}";
-                    byte[] buffer = System.Text.Encoding.UTF8.GetBytes(jsonResponse);
-                    
+                    await _fileController.HandleListDirectoryAsync(context, reqPath);
+                }
+                else if (request.Url.AbsolutePath == "/api/download" && request.HttpMethod == "GET")
+                {
+                    await _fileController.HandleDownloadAsync(context, reqPath);
+                }
+                else if (request.Url.AbsolutePath == "/api/upload" && request.HttpMethod == "POST")
+                {
+                    await _fileController.HandleUploadAsync(context, reqPath);
+                }
+                else if (request.Url.AbsolutePath == "/api/delete" && request.HttpMethod == "DELETE")
+                {
+                    await _fileController.HandleDeleteAsync(context, reqPath);
+                }
+                else if (request.Url.AbsolutePath == "/api/folder" && request.HttpMethod == "POST")
+                {
+                    await _fileController.HandleCreateFolderAsync(context, reqPath);
+                }
+                else if (request.Url.AbsolutePath == "/api/rename" && request.HttpMethod == "POST")
+                {
+                    string newName = request.QueryString["newname"] ?? "";
+                    await _fileController.HandleRenameAsync(context, reqPath, newName);
+                }
+                else if (request.Url.AbsolutePath == "/api/status" && request.HttpMethod == "GET")
+                {
+                    response.ContentType = "application/json";
                     response.StatusCode = 200;
-                    response.ContentLength64 = buffer.Length;
-                    
-                    using (var output = response.OutputStream)
-                    {
-                        await output.WriteAsync(buffer, 0, buffer.Length);
-                    }
+                    byte[] buffer = System.Text.Encoding.UTF8.GetBytes("{\"status\": \"online\", \"version\": \"1.0\"}");
+                    await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
+                    response.Close();
                 }
                 else
                 {
                     response.StatusCode = 404;
-                    using (var output = response.OutputStream)
-                    {
-                        byte[] buffer = System.Text.Encoding.UTF8.GetBytes("{\"error\": \"Not Found\"}");
-                        await output.WriteAsync(buffer, 0, buffer.Length);
-                    }
+                    byte[] buffer = System.Text.Encoding.UTF8.GetBytes("{\"error\": \"Not Found\"}");
+                    await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
+                    response.Close();
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error manejando la petición: {ex.Message}");
-                // No intentamos escribir en la respuesta si ya falló, el socket podría estar cerrado
-            }
-            finally
-            {
-                context.Response.Close();
+                Console.WriteLine($"Error general: {ex.Message}");
+                context.Response.Abort();
             }
         }
     }

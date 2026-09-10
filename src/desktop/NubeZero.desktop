@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0.0
+Name=Nube-Zero
+Comment=Cliente de escritorio para Nube-Zero
+Exec=NubeZero.Desktop %U
+Icon=NubeZero
+Terminal=false
+Type=Application
+Categories=Network;FileTransfer;

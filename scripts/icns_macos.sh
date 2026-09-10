@@ -12,7 +12,7 @@ INPUT_PNG="$1"
 
 # Obtener la ruta absoluta al directorio raíz del proyecto
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OUTPUT_DIR="${PROJECT_ROOT}/src/Assets/macOS icns tests"
+OUTPUT_DIR="${PROJECT_ROOT}/src/desktop/Assets/macOS_icns_tests"
 ICONSET_DIR="${OUTPUT_DIR}/MiIcono.iconset"
 
 echo "Generando iconos en ${OUTPUT_DIR}..."

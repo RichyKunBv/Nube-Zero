@@ -1,9 +1,25 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        xmlns:shared="clr-namespace:NubeZero.Shared;assembly=NubeZero.Shared"
         x:Class="NubeZero.Desktop.MainWindow"
-        Title="NubeZero.Desktop">
-    Welcome to Avalonia!
+        Title="NubeZero Desktop - Pruebas" Width="600" Height="400">
+    <Grid RowDefinitions="Auto, *">
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10" Spacing="10">
+            <Button Name="BtnRefresh" Content="Recargar Archivos" Click="BtnRefresh_Click"/>
+            <TextBlock Name="TxtStatus" VerticalAlignment="Center" Text="Listo" Foreground="Gray"/>
+        </StackPanel>
+        
+        <ListBox Grid.Row="1" Name="LstFiles" Margin="10" 
+                 DragDrop.AllowDrop="True" Background="#1E1E1E">
+            <ListBox.ItemTemplate>
+                <DataTemplate DataType="shared:ArchivoDTO">
+                    <StackPanel Orientation="Horizontal" Spacing="10" Margin="5">
+                        <TextBlock Text="{Binding EsCarpeta, StringFormat='[{0}]'}" Foreground="Cyan"/>
+                        <TextBlock Text="{Binding Nombre}" FontWeight="Bold" Foreground="White"/>
+                        <TextBlock Text="{Binding PesoBytes, StringFormat='({0} bytes)'}" Foreground="LightGray"/>
+                    </StackPanel>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </Grid>
 </Window>
