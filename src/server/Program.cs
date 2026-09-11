@@ -19,6 +19,10 @@ namespace NubeZero.Server
 
         static async Task Main(string[] args)
         {
+#if NET472
+            SQLitePCL.raw.SetProvider(new SQLitePCL.SQLite3Provider_sqlite3());
+#endif
+
             int port = 8080;
             if (args.Length >= 2 && args[0] == "--port" && int.TryParse(args[1], out int p))
             {
