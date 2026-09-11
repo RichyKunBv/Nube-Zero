@@ -48,7 +48,7 @@ function install_dependencies() {
   rm -f /etc/apt/keyrings/mono-official-archive-keyring.gpg || true
   
   apt-get update -y
-  apt-get install -y curl unzip sqlite3 libsqlite3-0
+  apt-get install -y curl unzip sqlite3
   
   if ! command -v mono &> /dev/null; then
     print_warn "Mono no encontrado. Intentando instalar desde los repositorios oficiales de tu sistema..."
@@ -90,20 +90,6 @@ function fetch_and_install() {
       cp -r extracted/publish_out/* "$BIN_DIR/"
   else
       cp -r extracted/* "$BIN_DIR/"
-  fi
-  
-  # Hack para ARMv6 (Raspberry Pi Zero):
-  # Microsoft.Data.Sqlite intentará cargar libsqlite3.so (nuestro nuevo proveedor).
-  # Hacemos un symlink hacia la librería nativa de Raspbian que SÍ es ARMv6 y eliminamos la ARMv7.
-  print_msg "Aplicando parche de compatibilidad SQLite para ARMv6..."
-  rm -f "$BIN_DIR/libe_sqlite3.so"
-  rm -rf "$BIN_DIR/runtimes"
-  SYSTEM_SQLITE=$(find /usr/lib -name "libsqlite3.so.0" | head -n 1)
-  if [ -n "$SYSTEM_SQLITE" ]; then
-      echo "Enlazando $SYSTEM_SQLITE -> $BIN_DIR/libsqlite3.so"
-      ln -sf "$SYSTEM_SQLITE" "$BIN_DIR/libsqlite3.so"
-  else
-      print_warn "No se encontró libsqlite3.so.0 en el sistema. Podría haber errores de base de datos."
   fi
   
   # Limpieza

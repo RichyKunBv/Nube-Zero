@@ -1,129 +1,149 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.Data.Sqlite;
+using System.Text.Json;
+
 namespace NubeZero.Server.Data
 {
+    public class User
+    {
+        public long Id { get; set; }
+        public string Username { get; set; }
+        public string PasswordHash { get; set; }
+    }
+
+    public class Session
+    {
+        public string Token { get; set; }
+        public long UserId { get; set; }
+        public DateTime FechaExpiracion { get; set; }
+    }
+
+    public class FileMeta
+    {
+        public string FilePath { get; set; }
+        public string UploadedBy { get; set; }
+        public long Size { get; set; }
+    }
+
+    public class DatabaseState
+    {
+        public List<User> Usuarios { get; set; } = new List<User>();
+        public List<Session> Sesiones { get; set; } = new List<Session>();
+        public List<FileMeta> FileMetadata { get; set; } = new List<FileMeta>();
+        public long NextUserId { get; set; } = 1;
+    }
+
     public class DatabaseContext
     {
         private readonly string _dbPath;
+        private DatabaseState _state;
+        private readonly object _lock = new object();
 
         public DatabaseContext()
         {
-            // Ubicación base en el mismo directorio que el ejecutable
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            _dbPath = Path.Combine(baseDir, "Storage", "usuarios.db");
+            _dbPath = Path.Combine(baseDir, "Storage", "database.json");
             EnsureDatabaseExists();
         }
 
         private void EnsureDatabaseExists()
         {
-            // Asegurar directorio
             string dir = Path.GetDirectoryName(_dbPath);
             if (!Directory.Exists(dir))
                 Directory.CreateDirectory(dir);
 
-            bool isNew = !File.Exists(_dbPath);
-
-            using (var connection = GetConnection())
+            if (File.Exists(_dbPath))
             {
-                connection.Open();
-
-                var command = connection.CreateCommand();
-                command.CommandText = @"
-                    CREATE TABLE IF NOT EXISTS Usuarios (
-                        Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        Username TEXT UNIQUE NOT NULL,
-                        PasswordHash TEXT NOT NULL
-                    );
-
-                    CREATE TABLE IF NOT EXISTS Sesiones (
-                        Token TEXT PRIMARY KEY,
-                        UserId INTEGER NOT NULL,
-                        FechaExpiracion DATETIME NOT NULL,
-                        FOREIGN KEY(UserId) REFERENCES Usuarios(Id)
-                    );
-
-                    CREATE TABLE IF NOT EXISTS FileMetadata (
-                        FilePath TEXT PRIMARY KEY,
-                        UploadedBy TEXT NOT NULL,
-                        Size INTEGER NOT NULL
-                    );
-                ";
-                command.ExecuteNonQuery();
-
-                if (isNew)
+                try
                 {
-                    CheckAndCreateInitialUser(connection);
+                    string json = File.ReadAllText(_dbPath);
+                    _state = JsonSerializer.Deserialize<DatabaseState>(json) ?? new DatabaseState();
                 }
+                catch
+                {
+                    _state = new DatabaseState();
+                }
+            }
+            else
+            {
+                _state = new DatabaseState();
+                Save();
+            }
+
+            if (_state.Usuarios.Count == 0)
+            {
+                CheckAndCreateInitialUser();
             }
         }
 
-        private void CheckAndCreateInitialUser(SqliteConnection connection)
+        private void Save()
         {
-            var command = connection.CreateCommand();
-            command.CommandText = "SELECT COUNT(*) FROM Usuarios";
-            long count = (long)command.ExecuteScalar();
-
-            if (count == 0)
+            lock (_lock)
             {
-                Console.WriteLine("\n=======================================================");
-                Console.WriteLine("    PRIMER INICIO DE NUBE-ZERO - CONFIGURACIÓN INICIAL   ");
-                Console.WriteLine("=======================================================");
-                Console.WriteLine("No se encontraron usuarios en la base de datos.");
-                
-                string username = "";
-                while (string.IsNullOrWhiteSpace(username))
-                {
-                    Console.Write("Introduce el nuevo nombre de administrador: ");
-                    username = Console.ReadLine()?.Trim();
-                }
-
-                string password = "";
-                while (string.IsNullOrWhiteSpace(password))
-                {
-                    Console.Write("Introduce la nueva contraseña: ");
-                    password = Console.ReadLine()?.Trim();
-                }
-
-                string hash = HashPassword(password);
-
-                var insertCmd = connection.CreateCommand();
-                insertCmd.CommandText = "INSERT INTO Usuarios (Username, PasswordHash) VALUES (@user, @hash)";
-                insertCmd.Parameters.AddWithValue("@user", username);
-                insertCmd.Parameters.AddWithValue("@hash", hash);
-                insertCmd.ExecuteNonQuery();
-
-                Console.WriteLine($"\nUsuario '{username}' creado con éxito. Ya puedes iniciar sesión desde la aplicación.");
-                Console.WriteLine("=======================================================\n");
+                string json = JsonSerializer.Serialize(_state, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(_dbPath, json);
             }
+        }
+
+        private void CheckAndCreateInitialUser()
+        {
+            Console.WriteLine("\n=======================================================");
+            Console.WriteLine("    PRIMER INICIO DE NUBE-ZERO - CONFIGURACIÓN INICIAL   ");
+            Console.WriteLine("=======================================================");
+            Console.WriteLine("No se encontraron usuarios en la base de datos.");
+
+            string username = "";
+            while (string.IsNullOrWhiteSpace(username))
+            {
+                Console.Write("Introduce el nuevo nombre de administrador: ");
+                username = Console.ReadLine()?.Trim();
+            }
+
+            string password = "";
+            while (string.IsNullOrWhiteSpace(password))
+            {
+                Console.Write("Introduce la nueva contraseña: ");
+                password = Console.ReadLine()?.Trim();
+            }
+
+            string hash = HashPassword(password);
+
+            lock (_lock)
+            {
+                _state.Usuarios.Add(new User
+                {
+                    Id = _state.NextUserId++,
+                    Username = username,
+                    PasswordHash = hash
+                });
+                Save();
+            }
+
+            Console.WriteLine($"\nUsuario '{username}' creado con éxito. Ya puedes iniciar sesión desde la aplicación.");
+            Console.WriteLine("=======================================================\n");
         }
 
         public string CreateSession(string username, string password)
         {
             string hash = HashPassword(password);
 
-            using (var connection = GetConnection())
+            lock (_lock)
             {
-                connection.Open();
-                var cmd = connection.CreateCommand();
-                cmd.CommandText = "SELECT Id FROM Usuarios WHERE Username = @u AND PasswordHash = @p";
-                cmd.Parameters.AddWithValue("@u", username);
-                cmd.Parameters.AddWithValue("@p", hash);
+                var user = _state.Usuarios.FirstOrDefault(u => u.Username == username && u.PasswordHash == hash);
+                if (user == null) return null;
 
-                var result = cmd.ExecuteScalar();
-                if (result == null) return null;
-
-                long userId = (long)result;
                 string token = Guid.NewGuid().ToString("N");
-
-                var insertCmd = connection.CreateCommand();
-                insertCmd.CommandText = "INSERT INTO Sesiones (Token, UserId, FechaExpiracion) VALUES (@t, @u, @e)";
-                insertCmd.Parameters.AddWithValue("@t", token);
-                insertCmd.Parameters.AddWithValue("@u", userId);
-                insertCmd.Parameters.AddWithValue("@e", DateTime.UtcNow.AddDays(30)); // Sesión de 30 días
-                insertCmd.ExecuteNonQuery();
+                _state.Sesiones.Add(new Session
+                {
+                    Token = token,
+                    UserId = user.Id,
+                    FechaExpiracion = DateTime.UtcNow.AddDays(30)
+                });
+                Save();
 
                 return token;
             }
@@ -131,85 +151,68 @@ namespace NubeZero.Server.Data
 
         public string ValidateTokenAndGetUser(string token)
         {
-            using (var connection = GetConnection())
+            lock (_lock)
             {
-                connection.Open();
-                var cmd = connection.CreateCommand();
-                cmd.CommandText = @"
-                    SELECT u.Username 
-                    FROM Sesiones s
-                    JOIN Usuarios u ON s.UserId = u.Id
-                    WHERE s.Token = @t AND s.FechaExpiracion > @now";
-                cmd.Parameters.AddWithValue("@t", token);
-                cmd.Parameters.AddWithValue("@now", DateTime.UtcNow);
+                var session = _state.Sesiones.FirstOrDefault(s => s.Token == token && s.FechaExpiracion > DateTime.UtcNow);
+                if (session == null) return null;
 
-                var result = cmd.ExecuteScalar();
-                return result as string;
+                var user = _state.Usuarios.FirstOrDefault(u => u.Id == session.UserId);
+                return user?.Username;
             }
         }
 
         public void SaveFileMetadata(string filePath, string username, long size)
         {
-            using (var connection = GetConnection())
+            lock (_lock)
             {
-                connection.Open();
-                var cmd = connection.CreateCommand();
-                cmd.CommandText = @"
-                    INSERT INTO FileMetadata (FilePath, UploadedBy, Size)
-                    VALUES (@path, @user, @size)
-                    ON CONFLICT(FilePath) DO UPDATE SET 
-                        UploadedBy = excluded.UploadedBy,
-                        Size = excluded.Size;
-                ";
-                cmd.Parameters.AddWithValue("@path", filePath);
-                cmd.Parameters.AddWithValue("@user", username);
-                cmd.Parameters.AddWithValue("@size", size);
-                cmd.ExecuteNonQuery();
+                var meta = _state.FileMetadata.FirstOrDefault(m => m.FilePath == filePath);
+                if (meta != null)
+                {
+                    meta.UploadedBy = username;
+                    meta.Size = size;
+                }
+                else
+                {
+                    _state.FileMetadata.Add(new FileMeta
+                    {
+                        FilePath = filePath,
+                        UploadedBy = username,
+                        Size = size
+                    });
+                }
+                Save();
             }
         }
 
         public string GetFileOwner(string filePath)
         {
-            using (var connection = GetConnection())
+            lock (_lock)
             {
-                connection.Open();
-                var cmd = connection.CreateCommand();
-                cmd.CommandText = "SELECT UploadedBy FROM FileMetadata WHERE FilePath = @path";
-                cmd.Parameters.AddWithValue("@path", filePath);
-
-                var result = cmd.ExecuteScalar();
-                return result as string ?? "System";
+                var meta = _state.FileMetadata.FirstOrDefault(m => m.FilePath == filePath);
+                return meta?.UploadedBy ?? "System";
             }
         }
 
         public void DeleteFileMetadata(string filePath)
         {
-            using (var connection = GetConnection())
+            lock (_lock)
             {
-                connection.Open();
-                var cmd = connection.CreateCommand();
-                cmd.CommandText = "DELETE FROM FileMetadata WHERE FilePath = @path";
-                cmd.Parameters.AddWithValue("@path", filePath);
-                cmd.ExecuteNonQuery();
-            }
-        }
-        
-        public void RenameFileMetadata(string oldPath, string newPath)
-        {
-            using (var connection = GetConnection())
-            {
-                connection.Open();
-                var cmd = connection.CreateCommand();
-                cmd.CommandText = "UPDATE FileMetadata SET FilePath = @newPath WHERE FilePath = @oldPath";
-                cmd.Parameters.AddWithValue("@oldPath", oldPath);
-                cmd.Parameters.AddWithValue("@newPath", newPath);
-                cmd.ExecuteNonQuery();
+                _state.FileMetadata.RemoveAll(m => m.FilePath == filePath);
+                Save();
             }
         }
 
-        public SqliteConnection GetConnection()
+        public void RenameFileMetadata(string oldPath, string newPath)
         {
-            return new SqliteConnection($"Data Source={_dbPath}");
+            lock (_lock)
+            {
+                var meta = _state.FileMetadata.FirstOrDefault(m => m.FilePath == oldPath);
+                if (meta != null)
+                {
+                    meta.FilePath = newPath;
+                    Save();
+                }
+            }
         }
 
         private string HashPassword(string password)
