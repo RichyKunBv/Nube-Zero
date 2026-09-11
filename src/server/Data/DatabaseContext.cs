@@ -46,7 +46,7 @@ namespace NubeZero.Server.Data
         public DatabaseContext()
         {
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            _dbPath = Path.Combine(baseDir, "Storage", "database.json");
+            _dbPath = Path.Combine(baseDir, "database.json");
             EnsureDatabaseExists();
         }
 
@@ -172,6 +172,29 @@ namespace NubeZero.Server.Data
 
                 var user = _state.Usuarios.FirstOrDefault(u => u.Id == session.UserId);
                 return user?.Username;
+            }
+        }
+
+        public bool AddUser(string username, string password)
+        {
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)) return false;
+
+            lock (_lock)
+            {
+                if (_state.Usuarios.Any(u => u.Username.Equals(username, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return false; // El usuario ya existe
+                }
+
+                string hash = HashPassword(password);
+                _state.Usuarios.Add(new User
+                {
+                    Id = _state.NextUserId++,
+                    Username = username,
+                    PasswordHash = hash
+                });
+                Save();
+                return true;
             }
         }
 

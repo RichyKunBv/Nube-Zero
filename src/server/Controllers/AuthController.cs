@@ -65,6 +65,52 @@ namespace NubeZero.Server.Controllers
             }
         }
 
+        public async Task HandleRegisterAsync(HttpListenerContext context)
+        {
+            var request = context.Request;
+            var response = context.Response;
+
+            try
+            {
+                if (request.HttpMethod != "POST")
+                {
+                    await WriteErrorAsync(response, 405, "Método no permitido.");
+                    return;
+                }
+
+                using var reader = new StreamReader(request.InputStream, request.ContentEncoding);
+                string jsonBody = await reader.ReadToEndAsync();
+
+                var registerData = JsonSerializer.Deserialize<LoginRequest>(jsonBody);
+
+                if (registerData == null || string.IsNullOrWhiteSpace(registerData.Username) || string.IsNullOrWhiteSpace(registerData.Password))
+                {
+                    await WriteErrorAsync(response, 400, "Datos inválidos.");
+                    return;
+                }
+
+                bool success = _dbContext.AddUser(registerData.Username, registerData.Password);
+                if (!success)
+                {
+                    await WriteErrorAsync(response, 409, "El usuario ya existe.");
+                    return;
+                }
+
+                response.StatusCode = 201; // Created
+                response.ContentType = "application/json";
+                byte[] buffer = System.Text.Encoding.UTF8.GetBytes("{\"message\": \"Usuario creado exitosamente\"}");
+                await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
+            }
+            catch (Exception ex)
+            {
+                await WriteErrorAsync(response, 500, $"Error interno: {ex.Message}");
+            }
+            finally
+            {
+                response.Close();
+            }
+        }
+
         private async Task WriteErrorAsync(HttpListenerResponse response, int statusCode, string message)
         {
             try

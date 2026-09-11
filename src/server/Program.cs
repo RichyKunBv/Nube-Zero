@@ -101,6 +101,12 @@ namespace NubeZero.Server
                     }
                 }
 
+                if (request.Url.AbsolutePath == "/api/users/add")
+                {
+                    await _authController.HandleRegisterAsync(context);
+                    return;
+                }
+
                 // Obtener el path del querystring. Ej: /api/files?path=/mi_foto.jpg
                 string reqPath = request.QueryString["path"] ?? "";
 

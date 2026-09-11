@@ -150,6 +150,59 @@ public partial class MainPage : ContentPage
         }
     }
 
+    private void BtnLogout_Clicked(object sender, EventArgs e)
+    {
+        SecureStorage.Default.Remove("auth_token");
+        SecureStorage.Default.Remove("server_ip");
+        _token = string.Empty;
+        
+        if (_httpClient != null) 
+        {
+            _httpClient.Dispose();
+            _httpClient = null;
+        }
+
+        TxtUser.Text = string.Empty;
+        TxtPassword.Text = string.Empty;
+        TxtLoginError.IsVisible = false;
+        
+        MainView.IsVisible = false;
+        LoginView.IsVisible = true;
+    }
+
+    private async void BtnAddUser_Clicked(object sender, EventArgs e)
+    {
+        string newUser = await DisplayPromptAsync("Nuevo Usuario", "Ingresa el nombre del nuevo usuario:");
+        if (string.IsNullOrWhiteSpace(newUser)) return;
+        
+        string newPass = await DisplayPromptAsync("Contraseña", $"Ingresa la contraseña para {newUser}:");
+        if (string.IsNullOrWhiteSpace(newPass)) return;
+
+        try
+        {
+            var registerData = new { Username = newUser.Trim(), Password = newPass.Trim() };
+            var content = new StringContent(JsonSerializer.Serialize(registerData), Encoding.UTF8, "application/json");
+            
+            var response = await _httpClient.PostAsync("/api/users/add", content);
+            if (response.IsSuccessStatusCode)
+            {
+                await DisplayAlert("Éxito", $"El usuario {newUser} ha sido creado correctamente.", "OK");
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                await DisplayAlert("Error", "Este usuario ya existe.", "OK");
+            }
+            else
+            {
+                await DisplayAlert("Error", "No se pudo crear el usuario.", "OK");
+            }
+        }
+        catch (Exception ex)
+        {
+            await DisplayAlert("Error", $"Error de red: {ex.Message}", "OK");
+        }
+    }
+
     private async void BtnUpload_Clicked(object sender, EventArgs e)
     {
         try

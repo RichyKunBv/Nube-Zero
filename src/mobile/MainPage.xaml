@@ -20,12 +20,14 @@
         <Grid x:Name="MainView" IsVisible="False" RowDefinitions="Auto, *">
             <!-- HEADER -->
             <Frame Grid.Row="0" Margin="15,40,15,10" BackgroundColor="#20FFFFFF" CornerRadius="12" BorderColor="Transparent" Padding="15">
-                <Grid ColumnDefinitions="*, Auto">
+                <Grid ColumnDefinitions="*, Auto, Auto, Auto">
                     <VerticalStackLayout VerticalOptions="Center">
                         <Label Text="☁️ Nube-Zero" FontSize="22" FontAttributes="Bold" TextColor="White" />
                         <Label x:Name="TxtStatus" Text="Conectado" TextColor="#A0A0A0" FontSize="12"/>
                     </VerticalStackLayout>
-                    <ImageButton Grid.Column="1" Source="dotnet_bot.png" Clicked="BtnRefresh_Clicked" BackgroundColor="#30FFFFFF" CornerRadius="8" WidthRequest="40" HeightRequest="40" Padding="8"/>
+                    <ImageButton Grid.Column="1" Source="dotnet_bot.png" Clicked="BtnRefresh_Clicked" BackgroundColor="#30FFFFFF" CornerRadius="8" WidthRequest="40" HeightRequest="40" Padding="8" Margin="0,0,10,0"/>
+                    <Button Grid.Column="2" Text="👥" Clicked="BtnAddUser_Clicked" BackgroundColor="#30FFFFFF" TextColor="White" CornerRadius="8" HeightRequest="40" WidthRequest="40" Margin="0,0,10,0"/>
+                    <Button Grid.Column="3" Text="Salir" Clicked="BtnLogout_Clicked" BackgroundColor="#FF5555" TextColor="White" FontAttributes="Bold" CornerRadius="8" HeightRequest="40" Padding="10,0"/>
                 </Grid>
             </Frame>
 

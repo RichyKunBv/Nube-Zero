@@ -237,6 +237,76 @@ public partial class MainWindow : Window
             }
         }
     }
+
+    private void BtnLogout_Click(object? sender, RoutedEventArgs e)
+    {
+        _token = string.Empty;
+        if (_httpClient != null)
+        {
+            _httpClient.DefaultRequestHeaders.Authorization = null;
+        }
+        
+        TxtUser.Text = string.Empty;
+        TxtPassword.Text = string.Empty;
+        TxtLoginError.IsVisible = false;
+        
+        MainView.IsVisible = false;
+        LoginView.IsVisible = true;
+    }
+
+    private void BtnAddUser_Click(object? sender, RoutedEventArgs e)
+    {
+        TxtNewUser.Text = string.Empty;
+        TxtNewPassword.Text = string.Empty;
+        TxtAddUserError.IsVisible = false;
+        AddUserView.IsVisible = true;
+    }
+
+    private void BtnCancelAddUser_Click(object? sender, RoutedEventArgs e)
+    {
+        AddUserView.IsVisible = false;
+    }
+
+    private async void BtnConfirmAddUser_Click(object? sender, RoutedEventArgs e)
+    {
+        string user = TxtNewUser.Text?.Trim() ?? "";
+        string pass = TxtNewPassword.Text?.Trim() ?? "";
+
+        if (string.IsNullOrEmpty(user) || string.IsNullOrEmpty(pass))
+        {
+            TxtAddUserError.Text = "Llena todos los campos.";
+            TxtAddUserError.IsVisible = true;
+            return;
+        }
+
+        try
+        {
+            var registerData = new { Username = user, Password = pass };
+            var content = new StringContent(JsonSerializer.Serialize(registerData), Encoding.UTF8, "application/json");
+            
+            var response = await _httpClient.PostAsync("/api/users/add", content);
+            if (response.IsSuccessStatusCode)
+            {
+                AddUserView.IsVisible = false;
+                TxtStatus.Text = "Usuario añadido";
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                TxtAddUserError.Text = "El usuario ya existe.";
+                TxtAddUserError.IsVisible = true;
+            }
+            else
+            {
+                TxtAddUserError.Text = "Error al crear usuario.";
+                TxtAddUserError.IsVisible = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            TxtAddUserError.Text = $"Error: {ex.Message}";
+            TxtAddUserError.IsVisible = true;
+        }
+    }
 }
 
 // Conversores UI

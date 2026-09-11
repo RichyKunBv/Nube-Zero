@@ -16,9 +16,9 @@
         <Version>$([System.Text.RegularExpressions.Regex]::Match($(VersionFileContent), '(?&lt;= "V?)[0-9\.]+').Value)</Version>
 
 		<MauiXamlInflator>SourceGen</MauiXamlInflator>
-		<ApplicationTitle>NubeZero.Mobile</ApplicationTitle>
+		<ApplicationTitle>NubeZero</ApplicationTitle>
 		<ApplicationId>com.companyname.nubezero.mobile</ApplicationId>
-		<ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+		<ApplicationDisplayVersion>$(Version)</ApplicationDisplayVersion>
 		<ApplicationVersion>1</ApplicationVersion>
 
 		<SupportedOSPlatformVersion>21.0</SupportedOSPlatformVersion>
