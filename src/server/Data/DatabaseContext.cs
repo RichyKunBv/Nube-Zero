@@ -95,8 +95,17 @@ namespace NubeZero.Server.Data
                     JsonSerializer.Serialize(fs, _state, new JsonSerializerOptions { WriteIndented = true });
                 }
                 
-                // Mover de forma atómica para prevenir corrupción si se va la luz
-                File.Move(tempPath, _dbPath, true);
+                // Mover de forma atómica para prevenir corrupción si se va la luz (compatible con .NET 4.7.2)
+                try
+                {
+                    if (File.Exists(_dbPath))
+                        File.Delete(_dbPath);
+                    File.Move(tempPath, _dbPath);
+                }
+                catch
+                {
+                    throw;
+                }
             }
         }
 
