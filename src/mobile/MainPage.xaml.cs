@@ -41,7 +41,8 @@ public partial class MainPage : ContentPage
     {
         if (_httpClient != null) _httpClient.Dispose();
         
-        string baseAddress = $"http://{_serverIp}:8080";
+        string cleanIp = _serverIp.Replace("http://", "").Replace("https://", "").Replace(":8080", "").TrimEnd('/');
+        string baseAddress = $"http://{cleanIp}:8080";
         _httpClient = new HttpClient { BaseAddress = new Uri(baseAddress) };
         if (!string.IsNullOrEmpty(_token))
         {
