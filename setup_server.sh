@@ -92,6 +92,13 @@ function fetch_and_install() {
       cp -r extracted/* "$BIN_DIR/"
   fi
   
+  # Instalar CLI
+  if [ -f "extracted/cli/nubezero.sh" ]; then
+      print_msg "Instalando herramienta de línea de comandos (CLI)..."
+      cp extracted/cli/nubezero.sh /usr/local/bin/nubezero
+      chmod +x /usr/local/bin/nubezero
+  fi
+  
   # Limpieza
   cd /
   rm -rf "$TMP_DIR"
@@ -180,18 +187,27 @@ function action_uninstall() {
   print_msg "Desinstalación completada."
 }
 
-echo "Elige una opción:"
-echo "  1) Instalar Servidor Nube-Zero"
-echo "  2) Actualizar Servidor (Última Release)"
-echo "  3) Desinstalar Servidor"
-echo "  4) Salir"
-echo -ne "Opción: "
-read OPTION
+# Ejecución por argumentos o interactiva
+if [ "$1" == "update" ]; then
+  action_update
+elif [ "$1" == "install" ]; then
+  action_install
+elif [ "$1" == "uninstall" ]; then
+  action_uninstall
+else
+  echo "Elige una opción:"
+  echo "  1) Instalar Servidor Nube-Zero"
+  echo "  2) Actualizar Servidor (Última Release)"
+  echo "  3) Desinstalar Servidor"
+  echo "  4) Salir"
+  echo -ne "Opción: "
+  read OPTION
 
-case $OPTION in
-  1) action_install ;;
-  2) action_update ;;
-  3) action_uninstall ;;
-  4) exit 0 ;;
-  *) echo "Opción no válida."; exit 1 ;;
-esac
+  case $OPTION in
+    1) action_install ;;
+    2) action_update ;;
+    3) action_uninstall ;;
+    4) exit 0 ;;
+    *) echo "Opción no válida."; exit 1 ;;
+  esac
+fi

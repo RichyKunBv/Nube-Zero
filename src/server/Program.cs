@@ -20,15 +20,23 @@ namespace NubeZero.Server
         static async Task Main(string[] args)
         {
             int port = 8080;
-            if (args.Length >= 2 && args[0] == "--port" && int.TryParse(args[1], out int p))
+            string storagePath = null;
+            for (int i = 0; i < args.Length; i++)
             {
-                port = p;
+                if (args[i] == "--port" && i + 1 < args.Length && int.TryParse(args[i + 1], out int p))
+                {
+                    port = p;
+                }
+                else if (args[i] == "--storage" && i + 1 < args.Length)
+                {
+                    storagePath = args[i + 1];
+                }
             }
 
             Console.WriteLine($"Iniciando servidor Nube-Zero en el puerto {port}...");
             
-            _storageService = new StorageService();
-            _dbContext = new DatabaseContext();
+            _storageService = new StorageService(storagePath);
+            _dbContext = new DatabaseContext(storagePath);
             _authController = new AuthController(_dbContext);
             _authInterceptor = new AuthInterceptor(_dbContext);
             _fileController = new FileController(_storageService, _dbContext);

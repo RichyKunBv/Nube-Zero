@@ -43,9 +43,17 @@ namespace NubeZero.Server.Data
         private DatabaseState _state;
         private readonly object _lock = new object();
 
-        public DatabaseContext()
+        public DatabaseContext(string customStoragePath = null)
         {
-            string baseDir = Directory.GetCurrentDirectory();
+            string baseDir;
+            if (!string.IsNullOrWhiteSpace(customStoragePath))
+            {
+                baseDir = customStoragePath;
+            }
+            else
+            {
+                baseDir = Directory.GetCurrentDirectory();
+            }
             _dbPath = Path.Combine(baseDir, "database.json");
             EnsureDatabaseExists();
         }
