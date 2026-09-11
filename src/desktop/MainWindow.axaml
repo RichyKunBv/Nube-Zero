@@ -114,6 +114,7 @@
                     <TextBlock Text="☁️ Nube-Zero" FontSize="28" FontWeight="Black" HorizontalAlignment="Center" Foreground="White"/>
                     <TextBlock Text="Inicia sesión para continuar" HorizontalAlignment="Center" Foreground="#A0A0A0" Margin="0,0,0,10"/>
                     
+                    <TextBox Name="TxtServerUrl" Text="http://192.168.1.94:8080" PlaceholderText="URL Servidor (ej. http://192.168.1.94:8080)" Background="#10FFFFFF" Foreground="White" CornerRadius="8" Padding="10"/>
                     <TextBox Name="TxtUser" PlaceholderText="Usuario" Background="#10FFFFFF" Foreground="White" CornerRadius="8" Padding="10"/>
                     <TextBox Name="TxtPassword" PlaceholderText="Contraseña" PasswordChar="•" Background="#10FFFFFF" Foreground="White" CornerRadius="8" Padding="10"/>
                     

@@ -17,7 +17,7 @@ namespace NubeZero.Desktop;
 
 public partial class MainWindow : Window
 {
-    private static readonly HttpClient _httpClient = new HttpClient { BaseAddress = new Uri("http://localhost:8080") };
+    private HttpClient _httpClient = new HttpClient { BaseAddress = new Uri("http://localhost:8080") };
     private string _token = string.Empty;
 
     public MainWindow()
@@ -36,6 +36,7 @@ public partial class MainWindow : Window
     {
         string user = TxtUser.Text?.Trim() ?? "";
         string pass = TxtPassword.Text?.Trim() ?? "";
+        string serverUrl = TxtServerUrl.Text?.Trim() ?? "http://localhost:8080";
 
         if (string.IsNullOrEmpty(user) || string.IsNullOrEmpty(pass))
         {
@@ -45,6 +46,11 @@ public partial class MainWindow : Window
 
         try
         {
+            if (!serverUrl.StartsWith("http://") && !serverUrl.StartsWith("https://"))
+                serverUrl = "http://" + serverUrl;
+                
+            _httpClient = new HttpClient { BaseAddress = new Uri(serverUrl) };
+            
             var loginData = new { Username = user, Password = pass };
             var content = new StringContent(JsonSerializer.Serialize(loginData), Encoding.UTF8, "application/json");
             
