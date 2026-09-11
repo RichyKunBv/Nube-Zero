@@ -97,17 +97,31 @@ namespace NubeZero.Server.Data
             Console.WriteLine("No se encontraron usuarios en la base de datos.");
 
             string username = "";
-            while (string.IsNullOrWhiteSpace(username))
-            {
-                Console.Write("Introduce el nuevo nombre de administrador: ");
-                username = Console.ReadLine()?.Trim();
-            }
-
             string password = "";
-            while (string.IsNullOrWhiteSpace(password))
+
+            if (Console.IsInputRedirected)
             {
-                Console.Write("Introduce la nueva contraseña: ");
-                password = Console.ReadLine()?.Trim();
+                Console.WriteLine("Entorno no interactivo detectado (ej. systemd).");
+                Console.WriteLine("Creando usuario administrador por defecto.");
+                username = "admin";
+                password = "admin";
+                Console.WriteLine($"-> Usuario: {username}");
+                Console.WriteLine($"-> Contraseña: {password}");
+                Console.WriteLine("¡Por favor cambia esta contraseña inmediatamente!");
+            }
+            else
+            {
+                while (string.IsNullOrWhiteSpace(username))
+                {
+                    Console.Write("Introduce el nuevo nombre de administrador: ");
+                    username = Console.ReadLine()?.Trim();
+                }
+
+                while (string.IsNullOrWhiteSpace(password))
+                {
+                    Console.Write("Introduce la nueva contraseña: ");
+                    password = Console.ReadLine()?.Trim();
+                }
             }
 
             string hash = HashPassword(password);
