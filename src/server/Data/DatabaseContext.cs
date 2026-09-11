@@ -2,12 +2,7 @@ using System;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
-#if NET472
-using Mono.Data.Sqlite;
-using SqliteConnection = Mono.Data.Sqlite.SqliteConnection;
-#else
 using Microsoft.Data.Sqlite;
-#endif
 namespace NubeZero.Server.Data
 {
     public class DatabaseContext
