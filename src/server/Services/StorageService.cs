@@ -11,7 +11,7 @@ namespace NubeZero.Server.Services
         {
             if (!string.IsNullOrWhiteSpace(customStoragePath))
             {
-                _baseStoragePath = customStoragePath;
+                _baseStoragePath = Path.Combine(customStoragePath, "Storage");
             }
             else
             {
