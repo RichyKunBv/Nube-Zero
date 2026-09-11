@@ -97,6 +97,8 @@ jobs:
           cd src/server
           dotnet publish -c Release -f net472 -r linux-arm -o publish_out
           cd publish_out
+          mkdir -p cli
+          cp ../../../cli/nubezero.sh cli/
           zip -r ${{ github.workspace }}/NubeZero-Server.zip *
 
       # --- EMPAQUETADO WINDOWS ---

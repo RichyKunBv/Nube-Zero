@@ -25,6 +25,8 @@ Tras agotar las pruebas de software, se determinó lo siguiente respecto a los c
 * **Causa Raíz:** El adaptador físico Micro-USB OTG original estaba defectuoso o carecía de las líneas de datos internas (era un cable exclusivamente de carga). El pin 4 (ID) no estaba puenteado a tierra, lo que impedía que el procesador Broadcom abriera el canal de datos.
 * **Solución Física:** Se reemplazó el adaptador por un adaptador OTG real con soporte de datos. El sistema reconoció de inmediato la memoria Kingston DTSE9 de 16GB, mapeándola exitosamente en el bus de bloques como `/dev/sda`.
 
+![Raspberry Pi Zero W con adaptador USB OTG y Pendrive Kingston](images/setup.png)
+
 ## 3. Estado Actual del Sistema
 
 El bus de almacenamiento ya detecta correctamente el hardware montado:
