@@ -10,7 +10,7 @@ namespace NubeZero.Server.Services
         public StorageService()
         {
             // Ubicación base en el mismo directorio que el ejecutable
-            _baseStoragePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Storage");
+            _baseStoragePath = Path.Combine(Directory.GetCurrentDirectory(), "Storage");
             EnsureStorageExists();
         }
 

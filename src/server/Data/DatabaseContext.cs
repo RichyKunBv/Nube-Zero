@@ -45,7 +45,7 @@ namespace NubeZero.Server.Data
 
         public DatabaseContext()
         {
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            string baseDir = Directory.GetCurrentDirectory();
             _dbPath = Path.Combine(baseDir, "database.json");
             EnsureDatabaseExists();
         }
@@ -84,8 +84,19 @@ namespace NubeZero.Server.Data
         {
             lock (_lock)
             {
-                string json = JsonSerializer.Serialize(_state, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(_dbPath, json);
+                // Limpiar sesiones expiradas para evitar fuga de memoria
+                _state.Sesiones.RemoveAll(s => s.FechaExpiracion <= DateTime.UtcNow);
+
+                string tempPath = _dbPath + ".tmp";
+                
+                // Usar stream para evitar cargar un string gigante en RAM
+                using (var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+                    JsonSerializer.Serialize(fs, _state, new JsonSerializerOptions { WriteIndented = true });
+                }
+                
+                // Mover de forma atómica para prevenir corrupción si se va la luz
+                File.Move(tempPath, _dbPath, true);
             }
         }
 
@@ -155,7 +166,7 @@ namespace NubeZero.Server.Data
                 {
                     Token = token,
                     UserId = user.Id,
-                    FechaExpiracion = DateTime.UtcNow.AddDays(30)
+                    FechaExpiracion = DateTime.UtcNow.AddMinutes(5)
                 });
                 Save();
 
@@ -169,6 +180,9 @@ namespace NubeZero.Server.Data
             {
                 var session = _state.Sesiones.FirstOrDefault(s => s.Token == token && s.FechaExpiracion > DateTime.UtcNow);
                 if (session == null) return null;
+
+                // Renovar la sesión por 5 minutos adicionales (inactividad)
+                session.FechaExpiracion = DateTime.UtcNow.AddMinutes(5);
 
                 var user = _state.Usuarios.FirstOrDefault(u => u.Id == session.UserId);
                 return user?.Username;

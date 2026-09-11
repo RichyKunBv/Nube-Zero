@@ -71,6 +71,9 @@ namespace NubeZero.Server
 
             try
             {
+                // Evitar fuga de sockets y threads inactivos forzando el cierre de la conexión TCP
+                response.KeepAlive = false;
+
                 Console.WriteLine($"[{request.HttpMethod}] {request.Url.AbsolutePath}");
                 response.AppendHeader("Access-Control-Allow-Origin", "*");
                 
