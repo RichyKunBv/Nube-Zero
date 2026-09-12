@@ -33,6 +33,35 @@ function print_warn() {
   echo -e "\n${YELLOW}[!] $1${NC}"
 }
 
+function check_multiple_installations() {
+  print_msg "Verificando si existen múltiples instalaciones de Nube-Zero..."
+  
+  # Buscar en ubicaciones donde un usuario típicamente podría haber copiado los archivos
+  # Ignoramos /opt/nubezero que es la ruta principal.
+  # Limitamos a /home, /mnt, y /media para no demorar demasiado.
+  FOUND_EXTRAS=$(find /home /mnt /media /usr/local -type f -name "NubeZero.Server.exe" 2>/dev/null)
+  
+  if [ -n "$FOUND_EXTRAS" ]; then
+    print_warn "¡ATENCIÓN! Se han detectado otras instalaciones (o backups) de Nube-Zero en tu sistema:"
+    echo "$FOUND_EXTRAS" | while read -r line; do
+        echo -e "${RED}- $line${NC}"
+    done
+    
+    print_warn "Se procederá a ELIMINAR automáticamente estas instalaciones adicionales para evitar conflictos..."
+    echo "$FOUND_EXTRAS" | while read -r file_path; do
+      DIR_TO_REMOVE=$(dirname "$file_path")
+      if [[ "$DIR_TO_REMOVE" == *"/bin" ]]; then
+          DIR_TO_REMOVE=$(dirname "$DIR_TO_REMOVE")
+      fi
+      echo "Eliminando: $DIR_TO_REMOVE"
+      rm -rf "$DIR_TO_REMOVE"
+    done
+    print_msg "Instalaciones adicionales eliminadas con éxito."
+  else
+    echo "Todo en orden (Instalación única detectada)."
+  fi
+}
+
 function install_dependencies() {
   print_msg "Verificando e instalando dependencias (curl, unzip, mono)..."
   
@@ -48,7 +77,7 @@ function install_dependencies() {
   rm -f /etc/apt/keyrings/mono-official-archive-keyring.gpg || true
   
   apt-get update -y
-  apt-get install -y curl unzip sqlite3
+  apt-get install -y curl unzip
   
   if ! command -v mono &> /dev/null; then
     print_warn "Mono no encontrado. Intentando instalar desde los repositorios oficiales de tu sistema..."
@@ -143,6 +172,8 @@ function action_install() {
   install_dependencies
   fetch_and_install
   setup_systemd "$PORT_INPUT"
+  
+  check_multiple_installations
 }
 
 function action_update() {
@@ -158,12 +189,24 @@ function action_update() {
     CURRENT_PORT=8080
   fi
   
+  CURRENT_STORAGE=$(grep "ExecStart" "$SERVICE_FILE" | grep -oP '(?<=--storage )\S+')
+  
+  # Forzar que el sistema siempre apunte a la ruta de instalación oficial
+  NEW_EXEC_START="ExecStart=/usr/bin/mono $INSTALL_DIR/bin/NubeZero.Server.exe --port $CURRENT_PORT"
+  if [ -n "$CURRENT_STORAGE" ]; then
+      NEW_EXEC_START="$NEW_EXEC_START --storage $CURRENT_STORAGE"
+  fi
+  sed -i "s|ExecStart=.*|$NEW_EXEC_START|g" "$SERVICE_FILE"
+  systemctl daemon-reload
+  
   systemctl stop nubezero
   
   fetch_and_install
   
   systemctl start nubezero
   print_msg "¡Nube-Zero actualizado a la última versión (Puerto $CURRENT_PORT)!"
+  
+  check_multiple_installations
 }
 
 function action_uninstall() {

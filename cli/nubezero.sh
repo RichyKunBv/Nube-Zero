@@ -74,7 +74,7 @@ function run_config() {
           echo -e "¿Borrar la base de datos local anterior para iniciar limpio? [y/N]"
           read DEL_LOCAL
           if [[ "$DEL_LOCAL" == "y" || "$DEL_LOCAL" == "Y" ]]; then
-              rm -f "$INSTALL_DIR/bin/database.json"
+              rm -f "$INSTALL_DIR/database.json" "$INSTALL_DIR/bin/database.json"
           fi
           
           CURRENT_PORT=$(grep "ExecStart" "$SERVICE_FILE" | grep -oP '(?<=--port )\d+')
