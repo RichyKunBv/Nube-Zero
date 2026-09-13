@@ -17,6 +17,10 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
+# Autogestión de permisos (Si el sistema está en Solo Lectura)
+mount -o remount,rw / 2>/dev/null || true
+mount -o remount,rw /boot/firmware 2>/dev/null || true
+
 function print_header() {
   echo -e "${CYAN}==========================================${NC}"
   echo -e "${CYAN}             ☁️ Nube-Zero CLI             ${NC}"
@@ -63,6 +67,30 @@ function run_config() {
           
           sed -i "s|ExecStart=.*|ExecStart=/usr/bin/mono $INSTALL_DIR/bin/NubeZero.Server.exe --port $CURRENT_PORT --storage $MOUNT_DIR|g" "$SERVICE_FILE"
           echo -e "${GREEN}Almacenamiento configurado en $MOUNT_DIR${NC}"
+          
+          echo -e "\n${YELLOW}¿Deseas activar el Blindaje de Almacenamiento (Modo Solo Lectura en la MicroSD para evitar desgaste)? [y/N]${NC}"
+          read ENABLE_RO
+          if [[ "$ENABLE_RO" == "y" || "$ENABLE_RO" == "Y" ]]; then
+              echo -e "Configurando Bind Mounts y Modo Solo Lectura..."
+              mkdir -p /mnt/nubezero_usb/syslogs /mnt/nubezero_usb/tmp /mnt/nubezero_usb/vartmp
+              cp -a /var/log/* /mnt/nubezero_usb/syslogs/ 2>/dev/null || true
+              
+              if ! grep -q "/var/log" /etc/fstab; then
+                  echo "/mnt/nubezero_usb/syslogs /var/log none bind 0 0" >> /etc/fstab
+                  echo "/mnt/nubezero_usb/tmp /tmp none bind 0 0" >> /etc/fstab
+                  echo "/mnt/nubezero_usb/vartmp /var/tmp none bind 0 0" >> /etc/fstab
+              fi
+              
+              awk '$2 == "/" { if ($4 !~ /ro/) $4 = $4 ",ro" } 1' /etc/fstab > /etc/fstab.tmp && mv /etc/fstab.tmp /etc/fstab
+              awk '$2 == "/boot/firmware" { if ($4 !~ /ro/) $4 = $4 ",ro" } 1' /etc/fstab > /etc/fstab.tmp && mv /etc/fstab.tmp /etc/fstab
+              
+              if ! grep -q "alias ro=" /etc/bash.bashrc; then
+                  echo "alias ro='sudo mount -o remount,ro /; sudo mount -o remount,ro /boot/firmware'" >> /etc/bash.bashrc
+                  echo "alias rw='sudo mount -o remount,rw /; sudo mount -o remount,rw /boot/firmware'" >> /etc/bash.bashrc
+              fi
+              echo -e "${GREEN}Blindaje activado. La MicroSD quedará en Solo Lectura al reiniciar.${NC}"
+              echo -e "${CYAN}Nota: En el futuro puedes usar el comando 'rw' para modificar el sistema, y 'ro' para bloquearlo de nuevo.${NC}"
+          fi
       else
           echo -e "${RED}Dispositivo /dev/$DISK_NAME no encontrado.${NC}"
       fi
@@ -87,12 +115,45 @@ function run_config() {
   
   # 2. Rendimiento
   echo -e "\n${CYAN}2. Optimización del Sistema${NC}"
-  echo -e "¿Será Nube-Zero el uso exclusivo de esta Raspberry? (Desactivará Bluetooth y otros servicios para ahorrar RAM) [y/N]"
+  echo -e "¿Deseas aplicar la Optimización Headless Extrema (Recomendado para uso exclusivo de Nube-Zero)? [y/N]"
+  echo -e "Esto deshabilitará Swap, activará ZRAM, reducirá RAM de video y apagará servicios innecesarios."
   read EXCLUSIVE_USE
   if [[ "$EXCLUSIVE_USE" == "y" || "$EXCLUSIVE_USE" == "Y" ]]; then
-      systemctl disable bluetooth hciuart triggerhappy avahi-daemon 2>/dev/null || true
-      systemctl stop bluetooth hciuart triggerhappy avahi-daemon 2>/dev/null || true
-      echo -e "${GREEN}Servicios inútiles desactivados.${NC}"
+      echo -e "Aplicando optimizaciones extremas (Tardará unos segundos)..."
+      
+      # 1. Purgar dphys-swapfile
+      if systemctl is-active --quiet dphys-swapfile; then
+          dphys-swapfile swapoff || true
+          systemctl disable dphys-swapfile || true
+          apt-get purge -y dphys-swapfile || true
+          rm -f /var/swap || true
+      fi
+      
+      # 2. Instalar ZRAM
+      apt-get update -y > /dev/null
+      apt-get install -y zram-tools > /dev/null
+      echo -e "ALGO=lz4\nPERCENT=50" > /etc/default/zramswap
+      systemctl restart zramswap || true
+      echo "vm.swappiness=100" > /etc/sysctl.d/99-zram.conf
+      sysctl -p /etc/sysctl.d/99-zram.conf > /dev/null 2>&1 || true
+      
+      # 3. Deshabilitar tareas pesadas y servicios inútiles
+      systemctl disable --now apt-daily.timer apt-daily-upgrade.timer man-db.timer bluetooth hciuart triggerhappy avahi-daemon 2>/dev/null || true
+      
+      # 4. Reducir RAM de GPU
+      if [ -f /boot/firmware/config.txt ]; then
+          if ! grep -q "^gpu_mem=" /boot/firmware/config.txt; then
+              echo "gpu_mem=16" >> /boot/firmware/config.txt
+          else
+              sed -i 's/^gpu_mem=.*/gpu_mem=16/' /boot/firmware/config.txt
+          fi
+      fi
+      
+      # 5. Deshabilitar IPv6
+      echo -e "net.ipv6.conf.all.disable_ipv6=1\nnet.ipv6.conf.default.disable_ipv6=1" > /etc/sysctl.d/99-disable-ipv6.conf
+      sysctl -p /etc/sysctl.d/99-disable-ipv6.conf > /dev/null 2>&1 || true
+      
+      echo -e "${GREEN}Optimizaciones extremas aplicadas con éxito.${NC}"
   fi
   
   systemctl daemon-reload

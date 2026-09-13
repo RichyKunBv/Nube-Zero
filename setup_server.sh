@@ -25,6 +25,10 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
+# Autogestión de permisos (Si el sistema está en Solo Lectura)
+mount -o remount,rw / 2>/dev/null || true
+mount -o remount,rw /boot/firmware 2>/dev/null || true
+
 function print_msg() {
   echo -e "\n${GREEN}[+] $1${NC}"
 }

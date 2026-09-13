@@ -43,6 +43,25 @@ sudo bash setup_server.sh
 
 ---
 
+## 🛡️ Blindaje y Optimización para Raspberry Pi
+
+Nube-Zero incluye una herramienta de configuración de línea de comandos para transformar tu Raspberry Pi en un appliance (electrodoméstico) ultrarrápido y seguro a nivel hardware.
+
+Ejecutando el asistente interactivo:
+```bash
+sudo nubezero config
+```
+Podrás activar opciones avanzadas:
+1. **Blindaje de Almacenamiento (Desgaste Cero):** Trasladará de forma nativa los registros (`/var/log`, `/tmp`) hacia la memoria USB e instaurará el modo **Solo Lectura (`ro`)** en la MicroSD. Esto garantiza que la tarjeta SD dure años sin desgastarse. En el futuro, si deseas modificar tu sistema, simplemente escribe `rw` en tu terminal para habilitar escritura, y `ro` para volverla a bloquear.
+2. **Optimización Headless Extrema:** Deshabilitará el paginado físico de disco (Swap), activará **ZRAM** (compresión en RAM) para maximizar la memoria, reducirá la asignación de GPU y congelará temporizadores del sistema para evitar picos sorpresa de CPU. Todo con un solo click.
+
+![Servidor optimizado corriendo en Trixie](images/miserverT.png)
+
+> [!CAUTION]
+> **Recomendación de Sistema Operativo:** Estas optimizaciones de hardware modifican el núcleo de Linux, los servicios Swap, Systemd y la tabla de particiones `fstab`. Han sido **estrictamente validadas y desarrolladas en Raspberry Pi OS 13 Trixie (32-bit lite)**, que es el entorno nativo de desarrollo del proyecto. Desconocemos la estabilidad o si los comandos difieren en otras versiones de Debian (Bullseye/Bookworm) o en arquitecturas de 64-bits. Te sugerimos encarecidamente utilizar Raspbian Trixie para una experiencia libre de errores.
+
+---
+
 ## 📝 Nota de Hardware: Configuración del Bus USB - Raspberry Pi Zero 1W
 
 Documentación de los cambios aplicados en el sistema para corregir el problema de detección de periféricos USB en el arranque y forzar el puerto Micro-USB en modo Host en Debian Trixie Lite.
