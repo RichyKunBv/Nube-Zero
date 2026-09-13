@@ -42,6 +42,24 @@ sudo bash setup_server.sh
 *(Recuerda ejecutarlo con permisos de administrador o `sudo`)*
 
 ---
+### Conexión Rápida por SSH (`ssh.sh`)
+
+Para facilitarte la conexión remota a tu Raspberry Pi o servidor sin tener que recordar o escribir comandos largos de SSH cada vez, se incluye un script interactivo asistente: [`ssh.sh`](ssh.sh).
+
+**¿Cómo usarlo?**
+1. Dale permisos de ejecución al script (si aún no los tiene):
+   ```bash
+   chmod +x ssh.sh
+   ```
+2. Ejecútalo en tu terminal:
+   ```bash
+   ./ssh.sh
+   ```
+3. El asistente te solicitará tu **usuario** (por ejemplo, `pi` o tu nombre de usuario) y el **hostname/IP** (por ejemplo, `raspberrypi.local` o `192.168.1.100`).
+4. Si la conexión llega a fallar o te equivocas al escribir algún dato, el script te mostrará un menú interactivo para reintentar o cambiar de usuario/IP al instante sin tener que salir ni volver a empezar.
+
+---
+
 
 ## 🛡️ Blindaje y Optimización para Raspberry Pi
 
