@@ -150,6 +150,16 @@ public partial class MainPage : ContentPage
         }
     }
 
+    private void TxtServerIp_Completed(object sender, EventArgs e)
+    {
+        TxtUser.Focus();
+    }
+
+    private void TxtUser_Completed(object sender, EventArgs e)
+    {
+        TxtPassword.Focus();
+    }
+
     private void BtnLogout_Clicked(object sender, EventArgs e)
     {
         SecureStorage.Default.Remove("auth_token");
@@ -243,13 +253,42 @@ public partial class MainPage : ContentPage
 
     private async void BtnItemMenu_Clicked(object sender, EventArgs e)
     {
-        if (sender is ImageButton btn && btn.CommandParameter is ArchivoDTO dto)
+        if (sender is Button btn && btn.CommandParameter is ArchivoDTO dto)
         {
             string action = await DisplayActionSheet($"Opciones: {dto.Nombre}", "Cancelar", "Eliminar", "Descargar", "Detalles");
 
             if (action == "Descargar")
             {
-                await DisplayAlert("Info", "En MAUI Android se requiere manejo especial para guardar archivos públicos. (Por implementar).", "OK");
+                try
+                {
+                    TxtStatus.Text = $"Descargando {dto.Nombre}...";
+                    string relativePath = $"/{Uri.EscapeDataString(dto.Nombre)}";
+                    var response = await _httpClient.GetAsync($"/api/download?path={relativePath}", HttpCompletionOption.ResponseHeadersRead);
+                    response.EnsureSuccessStatusCode();
+
+                    string safeFileName = Path.GetFileName(dto.Nombre);
+                    if (string.IsNullOrWhiteSpace(safeFileName)) safeFileName = "archivo_descargado";
+                    string localFile = Path.Combine(FileSystem.CacheDirectory, safeFileName);
+
+                    using (var stream = await response.Content.ReadAsStreamAsync())
+                    using (var fs = File.Create(localFile))
+                    {
+                        await stream.CopyToAsync(fs);
+                    }
+
+                    await Share.RequestAsync(new ShareFileRequest
+                    {
+                        Title = $"Guardar {safeFileName}",
+                        File = new ShareFile(localFile)
+                    });
+                    
+                    TxtStatus.Text = "Descarga lista";
+                }
+                catch (Exception ex)
+                {
+                    await DisplayAlert("Error", $"No se pudo descargar: {ex.Message}", "OK");
+                    TxtStatus.Text = "Error al descargar";
+                }
             }
             else if (action == "Eliminar")
             {

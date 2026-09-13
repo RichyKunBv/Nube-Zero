@@ -25,7 +25,7 @@
                         <Label Text="☁️ Nube-Zero" FontSize="22" FontAttributes="Bold" TextColor="White" />
                         <Label x:Name="TxtStatus" Text="Conectado" TextColor="#A0A0A0" FontSize="12"/>
                     </VerticalStackLayout>
-                    <ImageButton Grid.Column="1" Source="dotnet_bot.png" Clicked="BtnRefresh_Clicked" BackgroundColor="#30FFFFFF" CornerRadius="8" WidthRequest="40" HeightRequest="40" Padding="8" Margin="0,0,10,0"/>
+                    <Button Grid.Column="1" Text="🔄" Clicked="BtnRefresh_Clicked" BackgroundColor="#30FFFFFF" TextColor="White" CornerRadius="8" HeightRequest="40" WidthRequest="40" Margin="0,0,10,0"/>
                     <Button Grid.Column="2" Text="👥" Clicked="BtnAddUser_Clicked" BackgroundColor="#30FFFFFF" TextColor="White" CornerRadius="8" HeightRequest="40" WidthRequest="40" Margin="0,0,10,0"/>
                     <Button Grid.Column="3" Text="Salir" Clicked="BtnLogout_Clicked" BackgroundColor="#FF5555" TextColor="White" FontAttributes="Bold" CornerRadius="8" HeightRequest="40" Padding="10,0"/>
                 </Grid>
@@ -50,7 +50,7 @@
                                     </VerticalStackLayout>
                                     
                                     <!-- Menú contextual (3 puntos) -->
-                                    <ImageButton Grid.Column="2" Source="dotnet_bot.png" BackgroundColor="Transparent" WidthRequest="30" HeightRequest="30" VerticalOptions="Center" Clicked="BtnItemMenu_Clicked" CommandParameter="{Binding .}" />
+                                    <Button Grid.Column="2" Text="⋮" FontSize="24" BackgroundColor="Transparent" TextColor="White" WidthRequest="40" HeightRequest="40" VerticalOptions="Center" Clicked="BtnItemMenu_Clicked" CommandParameter="{Binding .}" />
                                 </Grid>
                             </Frame>
                         </DataTemplate>
@@ -73,9 +73,9 @@
                     <Label Text="☁️ Nube-Zero" FontSize="28" FontAttributes="Bold" HorizontalOptions="Center" TextColor="White"/>
                     <Label Text="Inicia sesión en tu Pi Zero" HorizontalOptions="Center" TextColor="#A0A0A0" Margin="0,0,0,10"/>
                     
-                    <Entry x:Name="TxtServerIp" Placeholder="IP del Servidor (Ej: 192.168.1.100)" Text="192.168.1.100" BackgroundColor="#10FFFFFF" TextColor="White" PlaceholderColor="#80FFFFFF" />
-                    <Entry x:Name="TxtUser" Placeholder="Usuario" BackgroundColor="#10FFFFFF" TextColor="White" PlaceholderColor="#80FFFFFF" />
-                    <Entry x:Name="TxtPassword" Placeholder="Contraseña" IsPassword="True" BackgroundColor="#10FFFFFF" TextColor="White" PlaceholderColor="#80FFFFFF" />
+                    <Entry x:Name="TxtServerIp" Placeholder="IP del Servidor (Ej: 192.168.1.100)" Text="192.168.1.100" BackgroundColor="#10FFFFFF" TextColor="White" PlaceholderColor="#80FFFFFF" ReturnType="Next" Completed="TxtServerIp_Completed" />
+                    <Entry x:Name="TxtUser" Placeholder="Usuario" BackgroundColor="#10FFFFFF" TextColor="White" PlaceholderColor="#80FFFFFF" ReturnType="Next" Completed="TxtUser_Completed" />
+                    <Entry x:Name="TxtPassword" Placeholder="Contraseña" IsPassword="True" BackgroundColor="#10FFFFFF" TextColor="White" PlaceholderColor="#80FFFFFF" ReturnType="Done" Completed="BtnLogin_Clicked" />
                     
                     <Label x:Name="TxtLoginError" TextColor="#FF5555" HorizontalOptions="Center" IsVisible="False"/>
                     
