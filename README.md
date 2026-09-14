@@ -2,16 +2,16 @@
 
 # Nube-Zero ☁️
 
-[![Versión](https://img.shields.io/badge/Versión-v0.4.2-blue.svg)](https://github.com/RichyKunBv/Nube-Zero)
-[![Status](https://img.shields.io/badge/Estado-Stable-green.svg)](https://github.com/RichyKunBv/Nube-Zero)
+[![Versión](https://img.shields.io/badge/Versión-v0.4.3-blue.svg)](https://github.com/RichyKunBv/Nube-Zero)
+[![Status](https://img.shields.io/badge/Estado-Desarrollo-yellow.svg)](https://github.com/RichyKunBv/Nube-Zero)
 [![Licencia](https://img.shields.io/badge/Licencia-Apache_2.0-orange.svg)](https://github.com/RichyKunBv/Nube-Zero/blob/main/LICENSE)
-[![Lenguaje](https://img.shields.io/badge/Lenguaje-C%23_.NET_10.0-lightgrey.svg)](https://dotnet.microsoft.com/es-es/download/dotnet/10.0)
-[![GUI](https://img.shields.io/badge/GUI-Avalonia_UI-purple.svg)](https://avaloniaui.net)
-
-Tu solución personal de nube ligera, rápida y multiplataforma.
-
-</div>
-
+---
+[![Lenguaje_Server](https://img.shields.io/badge/Lenguaje_Server-C%23_.NET_4.7.2_(estable)-lightgrey.svg)](https://dotnet.microsoft.com/es-es/download/dotnet-framework/net472)
+[![Lenguaje_Server](https://img.shields.io/badge/Lenguaje_Server-C%23_.NET_10.0_(en_pruebas)-lightgrey.svg)](https://dotnet.microsoft.com/es-es/download/dotnet/10.0)
+---
+[![Lenguaje_Cliente](https://img.shields.io/badge/Lenguaje_Cliente-C%23_.NET_10.0-lightgrey.svg)](https://dotnet.microsoft.com/es-es/download/dotnet/10.0)
+[![GUI_Desktop](https://img.shields.io/badge/GUI_Desktop-Avalonia_UI-purple.svg)](https://avaloniaui.net)
+[![GUI_Mobile](https://img.shields.io/badge/GUI_Mobile-MAUI-purple.svg)](https://avaloniaui.net)
 ---
 
 ## 🚀 Instalación y Descargas
