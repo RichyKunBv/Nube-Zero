@@ -61,17 +61,62 @@ Para facilitarte la conexión remota a tu Raspberry Pi o servidor sin tener que 
 ---
 
 
-## 🛡️ Blindaje y Optimización para Raspberry Pi
+## 🛡️ Blindaje y Arquitectura de Protección MicroSD y Red (`ro`)
 
-Nube-Zero incluye una herramienta de configuración de línea de comandos para transformar tu Raspberry Pi en un appliance (electrodoméstico) ultrarrápido y seguro a nivel hardware.
+Nube-Zero incluye una herramienta de configuración de línea de comandos para transformar tu Raspberry Pi en un appliance ultrarrápido y seguro a nivel hardware congelando la tarjeta MicroSD en modo solo lectura estricto (`ro`), redirigiendo la basura del sistema a una memoria USB por OTG y manteniendo la resolución de nombres DNS funcional.
 
 Ejecutando el asistente interactivo:
 ```bash
 sudo nubezero config
 ```
-Podrás activar opciones avanzadas:
-1. **Blindaje de Almacenamiento (Desgaste Cero):** Trasladará de forma nativa los registros (`/var/log`, `/tmp`) hacia la memoria USB e instaurará el modo **Solo Lectura (`ro`)** en la MicroSD. Esto garantiza que la tarjeta SD dure años sin desgastarse. En el futuro, si deseas modificar tu sistema, simplemente escribe `rw` en tu terminal para habilitar escritura, y `ro` para volverla a bloquear.
-2. **Optimización Headless Extrema:** Deshabilitará el paginado físico de disco (Swap), activará **ZRAM** (compresión en RAM) para maximizar la memoria, reducirá la asignación de GPU y congelará temporizadores del sistema para evitar picos sorpresa de CPU. Todo con un solo click.
+
+### Guía Manual / Pasos del Blindaje
+
+#### 1. Estructura de carpetas en la memoria USB
+Se crean los directorios dentro de la memoria USB (`/mnt/nubezero_usb`) para absorber las escrituras constantes y se migran los registros iniciales:
+```bash
+sudo mkdir -p /mnt/nubezero_usb/basurero/log
+sudo mkdir -p /mnt/nubezero_usb/basurero/tmp
+sudo rsync -a /var/log/ /mnt/nubezero_usb/basurero/log/
+```
+
+#### 2. Configuración de montajes (`/etc/fstab`)
+En `/etc/fstab` se agrega la opción `,ro` en la partición raíz (`/`), se monta la USB por UUID y se establecen los Bind Mounts:
+```text
+# 1. Partición raíz de la MicroSD congelada en Solo Lectura (ro)
+PARTUUID=c4f4b55e-02  /               ext4    defaults,noatime,ro  0       1
+
+# 2. Almacenamiento secundario USB Kingston
+UUID=f3ff54a0-fad3-4494-9ecc-c6aca96a748c /mnt/nubezero_usb ext4 defaults,noatime 0 2
+
+# 3. Redirección de escrituras pesadas (Bind Mounts)
+/mnt/nubezero_usb/basurero/log  /var/log  none  bind  0  0
+/mnt/nubezero_usb/basurero/tmp  /tmp      none  bind  0  0
+/mnt/nubezero_usb/basurero/tmp  /var/tmp  none  bind  0  0
+```
+
+#### 3. Solución a la resolución de nombres DNS
+Para evitar que el bloqueo de escritura en `/etc/resolv.conf` rompa la conectividad a Internet, se enlaza el archivo DNS hacia `/tmp` (ubicado en la USB) y se definen los servidores DNS:
+```bash
+# Eliminar el archivo estático y crear enlace simbólico a la USB
+sudo rm -f /etc/resolv.conf
+sudo ln -s /tmp/resolv.conf /etc/resolv.conf
+
+# Inyectar servidores DNS públicos directamente en la USB
+echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" | sudo tee /tmp/resolv.conf
+```
+
+#### 4. Atajos de mantenimiento (`~/.bashrc` / `/etc/bash.bashrc`)
+Se agregan los alias `rw` y `ro` para modificar el estado de la MicroSD en caliente durante mantenimientos:
+```bash
+alias rw='sudo mount -o remount,rw / && sudo mount -o remount,rw /boot/firmware && echo "SD Desbloqueada (Modo Escritura)"'
+alias ro='sudo mount -o remount,ro / && sudo mount -o remount,ro /boot/firmware && echo "SD Congelada (Solo Lectura)"'
+```
+
+#### 5. Validación del sistema
+Tras reiniciar (`sudo reboot`), se puede verificar el blindaje con:
+1. **Prueba de protección SD:** `sudo touch /prueba.txt` *(Esperado: Read-only file system)*
+2. **Prueba de DNS:** `ping -c 2 github.com` *(Esperado: 0% pérdida)*
 
 ![Servidor optimizado corriendo en Trixie](images/miserverT.png)
 

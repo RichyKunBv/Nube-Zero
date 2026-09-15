@@ -72,21 +72,26 @@ function run_config() {
           read ENABLE_RO
           if [[ "$ENABLE_RO" == "y" || "$ENABLE_RO" == "Y" ]]; then
               echo -e "Configurando Bind Mounts y Modo Solo Lectura..."
-              mkdir -p /mnt/nubezero_usb/syslogs /mnt/nubezero_usb/tmp /mnt/nubezero_usb/vartmp
-              cp -a /var/log/* /mnt/nubezero_usb/syslogs/ 2>/dev/null || true
+              mkdir -p /mnt/nubezero_usb/basurero/log /mnt/nubezero_usb/basurero/tmp
+              rsync -a /var/log/ /mnt/nubezero_usb/basurero/log/ 2>/dev/null || true
               
               if ! grep -q "/var/log" /etc/fstab; then
-                  echo "/mnt/nubezero_usb/syslogs /var/log none bind 0 0" >> /etc/fstab
-                  echo "/mnt/nubezero_usb/tmp /tmp none bind 0 0" >> /etc/fstab
-                  echo "/mnt/nubezero_usb/vartmp /var/tmp none bind 0 0" >> /etc/fstab
+                  echo "/mnt/nubezero_usb/basurero/log  /var/log  none  bind  0  0" >> /etc/fstab
+                  echo "/mnt/nubezero_usb/basurero/tmp  /tmp      none  bind  0  0" >> /etc/fstab
+                  echo "/mnt/nubezero_usb/basurero/tmp  /var/tmp  none  bind  0  0" >> /etc/fstab
               fi
+              
+              # Configurar resolución de nombres DNS dinámica
+              rm -f /etc/resolv.conf
+              ln -s /tmp/resolv.conf /etc/resolv.conf
+              echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" > /tmp/resolv.conf 2>/dev/null || true
               
               awk '$2 == "/" { if ($4 !~ /ro/) $4 = $4 ",ro" } 1' /etc/fstab > /etc/fstab.tmp && mv /etc/fstab.tmp /etc/fstab
               awk '$2 == "/boot/firmware" { if ($4 !~ /ro/) $4 = $4 ",ro" } 1' /etc/fstab > /etc/fstab.tmp && mv /etc/fstab.tmp /etc/fstab
               
               if ! grep -q "alias ro=" /etc/bash.bashrc; then
-                  echo "alias ro='sudo mount -o remount,ro /; sudo mount -o remount,ro /boot/firmware'" >> /etc/bash.bashrc
-                  echo "alias rw='sudo mount -o remount,rw /; sudo mount -o remount,rw /boot/firmware'" >> /etc/bash.bashrc
+                  echo "alias rw='sudo mount -o remount,rw / && sudo mount -o remount,rw /boot/firmware && echo \"SD Desbloqueada (Modo Escritura)\"'" >> /etc/bash.bashrc
+                  echo "alias ro='sudo mount -o remount,ro / && sudo mount -o remount,ro /boot/firmware && echo \"SD Congelada (Solo Lectura)\"'" >> /etc/bash.bashrc
               fi
               echo -e "${GREEN}Blindaje activado. La MicroSD quedará en Solo Lectura al reiniciar.${NC}"
               echo -e "${CYAN}Nota: En el futuro puedes usar el comando 'rw' para modificar el sistema, y 'ro' para bloquearlo de nuevo.${NC}"
