@@ -13,6 +13,14 @@ namespace NubeZero.Server.Data
         public long Id { get; set; }
         public string Username { get; set; }
         public string PasswordHash { get; set; }
+        public string Role { get; set; } = "Estandar"; // "Admin", "Estandar", "Visitante"
+    }
+
+    public class AuthSession
+    {
+        public string Token { get; set; }
+        public string Username { get; set; }
+        public string Role { get; set; }
     }
 
     public class Session
@@ -82,7 +90,26 @@ namespace NubeZero.Server.Data
                 Save();
             }
 
-            if (_state.Usuarios.Count == 0)
+            if (_state.Usuarios != null && _state.Usuarios.Count > 0)
+            {
+                bool modified = false;
+                for (int i = 0; i < _state.Usuarios.Count; i++)
+                {
+                    if (string.IsNullOrWhiteSpace(_state.Usuarios[i].Role))
+                    {
+                        if (i == 0 || _state.Usuarios[i].Username.Equals("admin", StringComparison.OrdinalIgnoreCase))
+                            _state.Usuarios[i].Role = "Admin";
+                        else
+                            _state.Usuarios[i].Role = "Estandar";
+                        modified = true;
+                    }
+                }
+                if (modified)
+                {
+                    Save();
+                }
+            }
+            else
             {
                 CheckAndCreateInitialUser();
             }
@@ -160,7 +187,8 @@ namespace NubeZero.Server.Data
                 {
                     Id = _state.NextUserId++,
                     Username = username,
-                    PasswordHash = hash
+                    PasswordHash = hash,
+                    Role = "Admin"
                 });
                 Save();
             }
@@ -169,13 +197,15 @@ namespace NubeZero.Server.Data
             Console.WriteLine("=======================================================\n");
         }
 
-        public string CreateSession(string username, string password)
+        public AuthSession Authenticate(string username, string password)
         {
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)) return null;
+
             string hash = HashPassword(password);
 
             lock (_lock)
             {
-                var user = _state.Usuarios.FirstOrDefault(u => u.Username == username && u.PasswordHash == hash);
+                var user = _state.Usuarios.FirstOrDefault(u => u.Username.Equals(username, StringComparison.OrdinalIgnoreCase) && u.PasswordHash == hash);
                 if (user == null) return null;
 
                 string token = Guid.NewGuid().ToString("N");
@@ -187,12 +217,25 @@ namespace NubeZero.Server.Data
                 });
                 Save();
 
-                return token;
+                return new AuthSession
+                {
+                    Token = token,
+                    Username = user.Username,
+                    Role = user.Role ?? "Estandar"
+                };
             }
         }
 
-        public string ValidateTokenAndGetUser(string token)
+        public string CreateSession(string username, string password)
         {
+            var auth = Authenticate(username, password);
+            return auth?.Token;
+        }
+
+        public AuthSession ValidateToken(string token)
+        {
+            if (string.IsNullOrWhiteSpace(token)) return null;
+
             lock (_lock)
             {
                 var session = _state.Sesiones.FirstOrDefault(s => s.Token == token && s.FechaExpiracion > DateTime.UtcNow);
@@ -202,13 +245,43 @@ namespace NubeZero.Server.Data
                 session.FechaExpiracion = DateTime.UtcNow.AddMinutes(5);
 
                 var user = _state.Usuarios.FirstOrDefault(u => u.Id == session.UserId);
-                return user?.Username;
+                if (user == null) return null;
+
+                return new AuthSession
+                {
+                    Token = token,
+                    Username = user.Username,
+                    Role = user.Role ?? "Estandar"
+                };
             }
         }
 
-        public bool AddUser(string username, string password)
+        public string ValidateTokenAndGetUser(string token)
+        {
+            return ValidateToken(token)?.Username;
+        }
+
+        public List<NubeZero.Shared.UserDTO> ListUsers()
+        {
+            lock (_lock)
+            {
+                return _state.Usuarios.Select(u => new NubeZero.Shared.UserDTO
+                {
+                    Id = u.Id,
+                    Username = u.Username,
+                    Role = u.Role ?? "Estandar"
+                }).ToList();
+            }
+        }
+
+        public bool AddUser(string username, string password, string role = "Estandar")
         {
             if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)) return false;
+
+            string validRole = "Estandar";
+            if (role?.Equals("Admin", StringComparison.OrdinalIgnoreCase) == true) validRole = "Admin";
+            else if (role?.Equals("Visitante", StringComparison.OrdinalIgnoreCase) == true) validRole = "Visitante";
+            else if (role?.Equals("Estandar", StringComparison.OrdinalIgnoreCase) == true) validRole = "Estandar";
 
             lock (_lock)
             {
@@ -221,11 +294,85 @@ namespace NubeZero.Server.Data
                 _state.Usuarios.Add(new User
                 {
                     Id = _state.NextUserId++,
-                    Username = username,
-                    PasswordHash = hash
+                    Username = username.Trim(),
+                    PasswordHash = hash,
+                    Role = validRole
                 });
                 Save();
                 return true;
+            }
+        }
+
+        public bool DeleteUser(string username, out string error)
+        {
+            error = null;
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                error = "Nombre de usuario inválido.";
+                return false;
+            }
+
+            lock (_lock)
+            {
+                var user = _state.Usuarios.FirstOrDefault(u => u.Username.Equals(username, StringComparison.OrdinalIgnoreCase));
+                if (user == null)
+                {
+                    error = "El usuario no existe.";
+                    return false;
+                }
+
+                // Si es admin, verificar que no sea el único admin del sistema
+                if (user.Role == "Admin")
+                {
+                    int adminCount = _state.Usuarios.Count(u => u.Role == "Admin");
+                    if (adminCount <= 1)
+                    {
+                        error = "No puedes eliminar el único Administrador del sistema.";
+                        return false;
+                    }
+                }
+
+                _state.Sesiones.RemoveAll(s => s.UserId == user.Id);
+                _state.Usuarios.Remove(user);
+                Save();
+                return true;
+            }
+        }
+
+        public bool ChangePassword(string username, string newPassword)
+        {
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(newPassword)) return false;
+
+            lock (_lock)
+            {
+                var user = _state.Usuarios.FirstOrDefault(u => u.Username.Equals(username, StringComparison.OrdinalIgnoreCase));
+                if (user == null) return false;
+
+                user.PasswordHash = HashPassword(newPassword);
+                Save();
+                return true;
+            }
+        }
+
+        public bool ValidatePassword(string username, string password)
+        {
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)) return false;
+
+            string hash = HashPassword(password);
+            lock (_lock)
+            {
+                return _state.Usuarios.Any(u => u.Username.Equals(username, StringComparison.OrdinalIgnoreCase) && u.PasswordHash == hash);
+            }
+        }
+
+        public string GetUserRole(string username)
+        {
+            if (string.IsNullOrWhiteSpace(username)) return null;
+
+            lock (_lock)
+            {
+                var user = _state.Usuarios.FirstOrDefault(u => u.Username.Equals(username, StringComparison.OrdinalIgnoreCase));
+                return user?.Role;
             }
         }
 

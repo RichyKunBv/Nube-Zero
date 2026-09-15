@@ -15,9 +15,9 @@ namespace NubeZero.Server.Auth
         }
 
         /// <summary>
-        /// Valida la petición entrante. Devuelve el nombre de usuario si es válido, de lo contrario null.
+        /// Valida la petición entrante. Devuelve la sesión (usuario y rol) si es válida, de lo contrario null.
         /// </summary>
-        public string ValidateRequest(HttpListenerRequest request)
+        public AuthSession ValidateSession(HttpListenerRequest request)
         {
             string authHeader = request.Headers["Authorization"];
             if (string.IsNullOrWhiteSpace(authHeader) || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
@@ -26,8 +26,12 @@ namespace NubeZero.Server.Auth
             }
 
             string token = authHeader.Substring("Bearer ".Length).Trim();
-            
-            return _dbContext.ValidateTokenAndGetUser(token);
+            return _dbContext.ValidateToken(token);
+        }
+
+        public string ValidateRequest(HttpListenerRequest request)
+        {
+            return ValidateSession(request)?.Username;
         }
 
         public async Task WriteUnauthorizedAsync(HttpListenerResponse response)
@@ -37,6 +41,25 @@ namespace NubeZero.Server.Auth
                 response.StatusCode = 401;
                 response.ContentType = "application/json";
                 byte[] buffer = System.Text.Encoding.UTF8.GetBytes("{\"error\":\"No autorizado. Token inválido o expirado.\"}");
+                await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
+            }
+            catch
+            {
+            }
+            finally
+            {
+                response.Close();
+            }
+        }
+
+        public async Task WriteForbiddenAsync(HttpListenerResponse response, string message = "Acceso denegado. Permisos insuficientes.")
+        {
+            try
+            {
+                response.StatusCode = 403;
+                response.ContentType = "application/json";
+                string json = System.Text.Json.JsonSerializer.Serialize(new { error = message });
+                byte[] buffer = System.Text.Encoding.UTF8.GetBytes(json);
                 await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
             }
             catch

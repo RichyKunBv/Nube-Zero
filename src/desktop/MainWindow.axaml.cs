@@ -19,6 +19,8 @@ public partial class MainWindow : Window
 {
     private HttpClient _httpClient = new HttpClient { BaseAddress = new Uri("http://localhost:8080") };
     private string _token = string.Empty;
+    private string _username = string.Empty;
+    private string _role = "Estandar";
 
     public MainWindow()
     {
@@ -60,9 +62,16 @@ public partial class MainWindow : Window
                 var json = await response.Content.ReadAsStringAsync();
                 var result = JsonSerializer.Deserialize<JsonElement>(json);
                 _token = result.GetProperty("token").GetString() ?? "";
+                _username = result.TryGetProperty("username", out var uProp) ? uProp.GetString() ?? user : user;
+                _role = result.TryGetProperty("role", out var rProp) ? rProp.GetString() ?? "Estandar" : "Estandar";
                 
                 _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _token);
                 
+                // Actualizar interfaz según el rol
+                TxtUserInfo.Text = $"👤 {_username} [{_role}]";
+                BtnUsersAdmin.IsVisible = (_role == "Admin");
+                BtnUploadFab.IsVisible = (_role != "Visitante");
+
                 LoginView.IsVisible = false;
                 MainView.IsVisible = true;
                 
@@ -123,6 +132,12 @@ public partial class MainWindow : Window
     {
         if (LoginView.IsVisible) return; // No permitir drop en login
         
+        if (_role == "Visitante")
+        {
+            TxtStatus.Text = "Permiso denegado: Los visitantes solo pueden descargar.";
+            return;
+        }
+
         var files = e.DataTransfer.TryGetFiles();
         if (files == null) return;
 
@@ -140,6 +155,12 @@ public partial class MainWindow : Window
 
     private async void BtnUploadManual_Click(object? sender, RoutedEventArgs e)
     {
+        if (_role == "Visitante")
+        {
+            TxtStatus.Text = "Permiso denegado: Los visitantes solo pueden descargar.";
+            return;
+        }
+
         var topLevel = TopLevel.GetTopLevel(this);
         var files = await topLevel!.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
@@ -221,6 +242,12 @@ public partial class MainWindow : Window
 
     private async void BtnDelete_Click(object? sender, RoutedEventArgs e)
     {
+        if (_role == "Visitante")
+        {
+            TxtStatus.Text = "Permiso denegado: Los visitantes no pueden eliminar archivos.";
+            return;
+        }
+
         if (sender is MenuItem menuItem && menuItem.DataContext is ArchivoDTO dto)
         {
             try
@@ -241,6 +268,9 @@ public partial class MainWindow : Window
     private void BtnLogout_Click(object? sender, RoutedEventArgs e)
     {
         _token = string.Empty;
+        _username = string.Empty;
+        _role = "Estandar";
+
         if (_httpClient != null)
         {
             _httpClient.DefaultRequestHeaders.Authorization = null;
@@ -250,63 +280,206 @@ public partial class MainWindow : Window
         TxtPassword.Text = string.Empty;
         TxtLoginError.IsVisible = false;
         
+        UsersAdminView.IsVisible = false;
+        ChangePasswordView.IsVisible = false;
         MainView.IsVisible = false;
         LoginView.IsVisible = true;
     }
 
-    private void BtnAddUser_Click(object? sender, RoutedEventArgs e)
+    #region Gestión de Usuarios (Admin)
+
+    private async void BtnUsersAdmin_Click(object? sender, RoutedEventArgs e)
     {
+        TxtUserAdminError.IsVisible = false;
         TxtNewUser.Text = string.Empty;
         TxtNewPassword.Text = string.Empty;
-        TxtAddUserError.IsVisible = false;
-        AddUserView.IsVisible = true;
+        UsersAdminView.IsVisible = true;
+        await LoadUsersAdminAsync();
     }
 
-    private void BtnCancelAddUser_Click(object? sender, RoutedEventArgs e)
+    private void BtnCloseUsersAdmin_Click(object? sender, RoutedEventArgs e)
     {
-        AddUserView.IsVisible = false;
+        UsersAdminView.IsVisible = false;
+    }
+
+    private async System.Threading.Tasks.Task LoadUsersAdminAsync()
+    {
+        try
+        {
+            var response = await _httpClient.GetAsync("/api/users");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                var users = JsonSerializer.Deserialize<List<UserDTO>>(json, options);
+                LstUsersAdmin.ItemsSource = users;
+            }
+        }
+        catch (Exception ex)
+        {
+            TxtUserAdminError.Text = $"Error al cargar usuarios: {ex.Message}";
+            TxtUserAdminError.IsVisible = true;
+        }
     }
 
     private async void BtnConfirmAddUser_Click(object? sender, RoutedEventArgs e)
     {
         string user = TxtNewUser.Text?.Trim() ?? "";
         string pass = TxtNewPassword.Text?.Trim() ?? "";
+        string role = (CmbNewUserRole.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Estandar";
 
         if (string.IsNullOrEmpty(user) || string.IsNullOrEmpty(pass))
         {
-            TxtAddUserError.Text = "Llena todos los campos.";
-            TxtAddUserError.IsVisible = true;
+            TxtUserAdminError.Text = "Llena todos los campos.";
+            TxtUserAdminError.IsVisible = true;
             return;
         }
 
         try
         {
-            var registerData = new { Username = user, Password = pass };
+            var registerData = new { Username = user, Password = pass, Role = role };
             var content = new StringContent(JsonSerializer.Serialize(registerData), Encoding.UTF8, "application/json");
             
             var response = await _httpClient.PostAsync("/api/users/add", content);
             if (response.IsSuccessStatusCode)
             {
-                AddUserView.IsVisible = false;
-                TxtStatus.Text = "Usuario añadido";
+                TxtNewUser.Text = string.Empty;
+                TxtNewPassword.Text = string.Empty;
+                TxtUserAdminError.IsVisible = false;
+                await LoadUsersAdminAsync();
             }
             else if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
             {
-                TxtAddUserError.Text = "El usuario ya existe.";
-                TxtAddUserError.IsVisible = true;
+                TxtUserAdminError.Text = "El usuario ya existe.";
+                TxtUserAdminError.IsVisible = true;
             }
             else
             {
-                TxtAddUserError.Text = "Error al crear usuario.";
-                TxtAddUserError.IsVisible = true;
+                var errJson = await response.Content.ReadAsStringAsync();
+                TxtUserAdminError.Text = $"Error: {errJson}";
+                TxtUserAdminError.IsVisible = true;
             }
         }
         catch (Exception ex)
         {
-            TxtAddUserError.Text = $"Error: {ex.Message}";
-            TxtAddUserError.IsVisible = true;
+            TxtUserAdminError.Text = $"Error: {ex.Message}";
+            TxtUserAdminError.IsVisible = true;
         }
     }
+
+    private async void BtnDeleteUserAdmin_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is string targetUsername)
+        {
+            if (targetUsername.Equals(_username, StringComparison.OrdinalIgnoreCase))
+            {
+                TxtUserAdminError.Text = "No puedes eliminar tu propia cuenta.";
+                TxtUserAdminError.IsVisible = true;
+                return;
+            }
+
+            try
+            {
+                var response = await _httpClient.DeleteAsync($"/api/users/delete?username={Uri.EscapeDataString(targetUsername)}");
+                if (response.IsSuccessStatusCode)
+                {
+                    TxtUserAdminError.IsVisible = false;
+                    await LoadUsersAdminAsync();
+                }
+                else
+                {
+                    var json = await response.Content.ReadAsStringAsync();
+                    TxtUserAdminError.Text = $"Error: {json}";
+                    TxtUserAdminError.IsVisible = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                TxtUserAdminError.Text = $"Error: {ex.Message}";
+                TxtUserAdminError.IsVisible = true;
+            }
+        }
+    }
+
+    #endregion
+
+    #region Cambio de Contraseña
+
+    private void BtnOpenChangePassword_Click(object? sender, RoutedEventArgs e)
+    {
+        TxtCurrentPassword.Text = string.Empty;
+        TxtNewPasswordChange.Text = string.Empty;
+        TxtConfirmPasswordChange.Text = string.Empty;
+        TxtChangePasswordError.IsVisible = false;
+        ChangePasswordView.IsVisible = true;
+    }
+
+    private void BtnCloseChangePassword_Click(object? sender, RoutedEventArgs e)
+    {
+        ChangePasswordView.IsVisible = false;
+    }
+
+    private async void BtnConfirmChangePassword_Click(object? sender, RoutedEventArgs e)
+    {
+        string currentPass = TxtCurrentPassword.Text?.Trim() ?? "";
+        string newPass = TxtNewPasswordChange.Text?.Trim() ?? "";
+        string confirmPass = TxtConfirmPasswordChange.Text?.Trim() ?? "";
+
+        if (string.IsNullOrEmpty(currentPass) || string.IsNullOrEmpty(newPass))
+        {
+            TxtChangePasswordError.Text = "Por favor completa todos los campos.";
+            TxtChangePasswordError.IsVisible = true;
+            return;
+        }
+
+        if (newPass != confirmPass)
+        {
+            TxtChangePasswordError.Text = "Las nuevas contraseñas no coinciden.";
+            TxtChangePasswordError.IsVisible = true;
+            return;
+        }
+
+        try
+        {
+            var reqData = new { CurrentPassword = currentPass, NewPassword = newPass };
+            var content = new StringContent(JsonSerializer.Serialize(reqData), Encoding.UTF8, "application/json");
+
+            var response = await _httpClient.PostAsync("/api/users/password", content);
+            if (response.IsSuccessStatusCode)
+            {
+                ChangePasswordView.IsVisible = false;
+                TxtStatus.Text = "Contraseña actualizada correctamente.";
+            }
+            else
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                try
+                {
+                    var doc = JsonDocument.Parse(json);
+                    if (doc.RootElement.TryGetProperty("error", out var err))
+                    {
+                        TxtChangePasswordError.Text = err.GetString();
+                    }
+                    else
+                    {
+                        TxtChangePasswordError.Text = "No se pudo actualizar la contraseña.";
+                    }
+                }
+                catch
+                {
+                    TxtChangePasswordError.Text = "Error al actualizar contraseña.";
+                }
+                TxtChangePasswordError.IsVisible = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            TxtChangePasswordError.Text = $"Error: {ex.Message}";
+            TxtChangePasswordError.IsVisible = true;
+        }
+    }
+
+    #endregion
 }
 
 // Conversores UI

@@ -156,9 +156,79 @@ function run_config() {
       echo -e "${GREEN}Optimizaciones extremas aplicadas con éxito.${NC}"
   fi
   
+  # 3. Contraseña de Administrador
+  echo -e "\n${CYAN}3. Contraseña de Administrador${NC}"
+  echo -e "¿Deseas cambiar o restablecer la contraseña del usuario administrador? [y/N]"
+  read CHANGE_ADMIN
+  if [[ "$CHANGE_ADMIN" == "y" || "$CHANGE_ADMIN" == "Y" ]]; then
+      change_admin_password
+  fi
+  
   systemctl daemon-reload
   systemctl restart nubezero
   echo -e "\n${GREEN}¡Configuración completada y servicio reiniciado!${NC}"
+}
+
+function change_admin_password() {
+  print_header
+  echo -e "${CYAN}--- Restablecer Contraseña de Administrador ---${NC}"
+  echo -e "Introduce la nueva contraseña para el administrador:"
+  read -s NEW_PASS
+  echo ""
+  echo -e "Confirma la nueva contraseña:"
+  read -s CONFIRM_PASS
+  echo ""
+  
+  if [ -z "$NEW_PASS" ]; then
+      echo -e "${RED}La contraseña no puede estar vacía.${NC}"
+      return
+  fi
+  
+  if [ "$NEW_PASS" != "$CONFIRM_PASS" ]; then
+      echo -e "${RED}Las contraseñas no coinciden. No se realizaron cambios.${NC}"
+      return
+  fi
+
+  PASS_HASH=$(echo -n "$NEW_PASS" | sha256sum | awk '{print $1}')
+  
+  DB_FILE=""
+  if [ -f "/mnt/nubezero_usb/database.json" ]; then
+      DB_FILE="/mnt/nubezero_usb/database.json"
+  elif [ -f "$INSTALL_DIR/bin/database.json" ]; then
+      DB_FILE="$INSTALL_DIR/bin/database.json"
+  elif [ -f "$INSTALL_DIR/database.json" ]; then
+      DB_FILE="$INSTALL_DIR/database.json"
+  fi
+
+  if [ -n "$DB_FILE" ] && [ -f "$DB_FILE" ]; then
+      python3 -c "
+import json
+try:
+    with open('$DB_FILE', 'r') as f:
+        data = json.load(f)
+    found = False
+    for u in data.get('Usuarios', []):
+        if u.get('Role') == 'Admin' or u.get('Username', '').lower() == 'admin':
+            u['PasswordHash'] = '$PASS_HASH'
+            u['Role'] = 'Admin'
+            found = True
+            break
+    if not found and len(data.get('Usuarios', [])) > 0:
+        data['Usuarios'][0]['PasswordHash'] = '$PASS_HASH'
+        data['Usuarios'][0]['Role'] = 'Admin'
+        found = True
+    if found:
+        with open('$DB_FILE', 'w') as f:
+            json.dump(data, f, indent=2)
+        print('SUCCESS')
+    else:
+        print('NO_USER')
+except Exception as e:
+    print('ERROR:', e)
+" | grep -q "SUCCESS" && echo -e "${GREEN}¡Contraseña de administrador actualizada con éxito!${NC}" || echo -e "${RED}No se pudo actualizar la contraseña en $DB_FILE.${NC}"
+  else
+      echo -e "${YELLOW}Base de datos no encontrada. La contraseña se configurará al iniciar Nube-Zero.${NC}"
+  fi
 }
 
 function run_update() {
@@ -181,6 +251,10 @@ case "$1" in
   -u|update)
     run_update
     ;;
+  passwd|password)
+    change_admin_password
+    systemctl restart nubezero
+    ;;
   start)
     systemctl start nubezero
     echo -e "${GREEN}Servicio iniciado.${NC}"
@@ -200,11 +274,12 @@ case "$1" in
     echo "Uso: nubezero [opción]"
     echo ""
     echo "Opciones:"
-    echo "  -c, config   Abre el asistente de configuración (Almacenamiento, Optimización, etc.)"
-    echo "  -u, update   Actualiza el servidor a la última versión"
-    echo "  start        Inicia el servicio"
-    echo "  stop         Detiene el servicio"
-    echo "  restart      Reinicia el servicio"
-    echo "  logs         Muestra los logs del servidor en tiempo real"
+    echo "  -c, config       Abre el asistente de configuración (Almacenamiento, Optimización, Contraseña)"
+    echo "  -u, update       Actualiza el servidor a la última versión"
+    echo "  passwd           Restablece la contraseña del usuario administrador"
+    echo "  start            Inicia el servicio"
+    echo "  stop             Detiene el servicio"
+    echo "  restart          Reinicia el servicio"
+    echo "  logs             Muestra los logs del servidor en tiempo real"
     ;;
 esac

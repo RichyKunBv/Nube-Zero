@@ -130,6 +130,14 @@ function fetch_and_install() {
       print_msg "Instalando herramienta de línea de comandos (CLI)..."
       cp extracted/cli/nubezero.sh /usr/local/bin/nubezero
       chmod +x /usr/local/bin/nubezero
+  elif [ -f "$BIN_DIR/cli/nubezero.sh" ]; then
+      print_msg "Instalando herramienta de línea de comandos (CLI)..."
+      cp "$BIN_DIR/cli/nubezero.sh" /usr/local/bin/nubezero
+      chmod +x /usr/local/bin/nubezero
+  else
+      print_msg "Descargando herramienta CLI nubezero..."
+      curl -sL https://raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/main/cli/nubezero.sh -o /usr/local/bin/nubezero 2>/dev/null || true
+      chmod +x /usr/local/bin/nubezero 2>/dev/null || true
   fi
   
   # Limpieza

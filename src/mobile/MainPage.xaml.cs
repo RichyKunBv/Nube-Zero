@@ -10,6 +10,8 @@ public partial class MainPage : ContentPage
     private HttpClient _httpClient;
     private string _token = string.Empty;
     private string _serverIp = string.Empty;
+    private string _username = string.Empty;
+    private string _role = "Estandar";
 
     public MainPage()
     {
@@ -25,11 +27,15 @@ public partial class MainPage : ContentPage
     {
         var savedIp = await SecureStorage.Default.GetAsync("server_ip");
         var savedToken = await SecureStorage.Default.GetAsync("auth_token");
+        var savedUser = await SecureStorage.Default.GetAsync("auth_user");
+        var savedRole = await SecureStorage.Default.GetAsync("auth_role");
 
         if (!string.IsNullOrEmpty(savedIp) && !string.IsNullOrEmpty(savedToken))
         {
             _serverIp = savedIp;
             _token = savedToken;
+            _username = savedUser ?? "Usuario";
+            _role = savedRole ?? "Estandar";
             TxtServerIp.Text = savedIp;
             
             InitHttpClient();
@@ -74,9 +80,13 @@ public partial class MainPage : ContentPage
                 var json = await response.Content.ReadAsStringAsync();
                 var result = JsonSerializer.Deserialize<JsonElement>(json);
                 _token = result.GetProperty("token").GetString() ?? "";
+                _username = result.TryGetProperty("username", out var uProp) ? uProp.GetString() ?? user : user;
+                _role = result.TryGetProperty("role", out var rProp) ? rProp.GetString() ?? "Estandar" : "Estandar";
                 
                 await SecureStorage.Default.SetAsync("server_ip", _serverIp);
                 await SecureStorage.Default.SetAsync("auth_token", _token);
+                await SecureStorage.Default.SetAsync("auth_user", _username);
+                await SecureStorage.Default.SetAsync("auth_role", _role);
                 
                 _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _token);
                 await TryConnectAsync();
@@ -94,6 +104,10 @@ public partial class MainPage : ContentPage
 
     private async Task TryConnectAsync()
     {
+        TxtUserInfo.Text = $"👤 {_username} [{_role}]";
+        BtnUsersAdmin.IsVisible = (_role == "Admin");
+        BtnUploadFab.IsVisible = (_role != "Visitante");
+
         LoginView.IsVisible = false;
         MainView.IsVisible = true;
         await LoadFilesAsync();
@@ -164,7 +178,12 @@ public partial class MainPage : ContentPage
     {
         SecureStorage.Default.Remove("auth_token");
         SecureStorage.Default.Remove("server_ip");
+        SecureStorage.Default.Remove("auth_user");
+        SecureStorage.Default.Remove("auth_role");
+        
         _token = string.Empty;
+        _username = string.Empty;
+        _role = "Estandar";
         
         if (_httpClient != null) 
         {
@@ -180,23 +199,46 @@ public partial class MainPage : ContentPage
         LoginView.IsVisible = true;
     }
 
-    private async void BtnAddUser_Clicked(object sender, EventArgs e)
+    #region Gestión de Usuarios (Admin)
+
+    private async void BtnUsersAdmin_Clicked(object sender, EventArgs e)
     {
-        string newUser = await DisplayPromptAsync("Nuevo Usuario", "Ingresa el nombre del nuevo usuario:");
+        string choice = await DisplayActionSheet("Gestión de Usuarios", "Cancelar", null, "➕ Crear nuevo usuario", "📋 Ver y eliminar usuarios");
+        
+        if (choice == "➕ Crear nuevo usuario")
+        {
+            await CreateUserFlowAsync();
+        }
+        else if (choice == "📋 Ver y eliminar usuarios")
+        {
+            await ManageUsersListFlowAsync();
+        }
+    }
+
+    private async Task CreateUserFlowAsync()
+    {
+        string newUser = await DisplayPromptAsync("Nuevo Usuario", "Ingresa el nombre del usuario:");
         if (string.IsNullOrWhiteSpace(newUser)) return;
         
         string newPass = await DisplayPromptAsync("Contraseña", $"Ingresa la contraseña para {newUser}:");
         if (string.IsNullOrWhiteSpace(newPass)) return;
 
+        string roleSelection = await DisplayActionSheet("Selecciona el Nivel de Acceso", "Cancelar", null, "Estándar", "Visitante", "Admin");
+        if (string.IsNullOrEmpty(roleSelection) || roleSelection == "Cancelar") return;
+
+        string role = "Estandar";
+        if (roleSelection == "Visitante") role = "Visitante";
+        else if (roleSelection == "Admin") role = "Admin";
+
         try
         {
-            var registerData = new { Username = newUser.Trim(), Password = newPass.Trim() };
+            var registerData = new { Username = newUser.Trim(), Password = newPass.Trim(), Role = role };
             var content = new StringContent(JsonSerializer.Serialize(registerData), Encoding.UTF8, "application/json");
             
             var response = await _httpClient.PostAsync("/api/users/add", content);
             if (response.IsSuccessStatusCode)
             {
-                await DisplayAlert("Éxito", $"El usuario {newUser} ha sido creado correctamente.", "OK");
+                await DisplayAlert("Éxito", $"El usuario {newUser} [{role}] ha sido creado correctamente.", "OK");
             }
             else if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
             {
@@ -213,8 +255,111 @@ public partial class MainPage : ContentPage
         }
     }
 
+    private async Task ManageUsersListFlowAsync()
+    {
+        try
+        {
+            var response = await _httpClient.GetAsync("/api/users");
+            if (!response.IsSuccessStatusCode)
+            {
+                await DisplayAlert("Error", "No se pudo obtener la lista de usuarios.", "OK");
+                return;
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var users = JsonSerializer.Deserialize<List<UserDTO>>(json, options);
+
+            if (users == null || users.Count == 0)
+            {
+                await DisplayAlert("Usuarios", "No hay usuarios registrados.", "OK");
+                return;
+            }
+
+            var userOptions = users.Select(u => $"{u.Username} [{u.Role}]").ToArray();
+            string selected = await DisplayActionSheet("Selecciona un usuario para gestionar", "Cerrar", null, userOptions);
+
+            if (string.IsNullOrEmpty(selected) || selected == "Cerrar") return;
+
+            string selectedUsername = selected.Split(' ')[0];
+            if (selectedUsername.Equals(_username, StringComparison.OrdinalIgnoreCase))
+            {
+                await DisplayAlert("Aviso", "No puedes eliminar tu propia cuenta en uso.", "OK");
+                return;
+            }
+
+            bool confirm = await DisplayAlert("Eliminar Usuario", $"¿Deseas eliminar permanentemente a '{selectedUsername}'?", "Sí, eliminar", "Cancelar");
+            if (confirm)
+            {
+                var delResponse = await _httpClient.DeleteAsync($"/api/users/delete?username={Uri.EscapeDataString(selectedUsername)}");
+                if (delResponse.IsSuccessStatusCode)
+                {
+                    await DisplayAlert("Éxito", $"Usuario {selectedUsername} eliminado.", "OK");
+                }
+                else
+                {
+                    var errJson = await delResponse.Content.ReadAsStringAsync();
+                    await DisplayAlert("Error", $"No se pudo eliminar: {errJson}", "OK");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await DisplayAlert("Error", $"Error: {ex.Message}", "OK");
+        }
+    }
+
+    #endregion
+
+    #region Cambio de Contraseña
+
+    private async void BtnChangePassword_Clicked(object sender, EventArgs e)
+    {
+        string currentPass = await DisplayPromptAsync("Cambiar Contraseña", "Ingresa tu contraseña actual:");
+        if (string.IsNullOrWhiteSpace(currentPass)) return;
+
+        string newPass = await DisplayPromptAsync("Cambiar Contraseña", "Ingresa la nueva contraseña:");
+        if (string.IsNullOrWhiteSpace(newPass)) return;
+
+        string confirmPass = await DisplayPromptAsync("Cambiar Contraseña", "Confirma la nueva contraseña:");
+        if (newPass != confirmPass)
+        {
+            await DisplayAlert("Error", "Las contraseñas no coinciden.", "OK");
+            return;
+        }
+
+        try
+        {
+            var reqData = new { CurrentPassword = currentPass, NewPassword = newPass };
+            var content = new StringContent(JsonSerializer.Serialize(reqData), Encoding.UTF8, "application/json");
+
+            var response = await _httpClient.PostAsync("/api/users/password", content);
+            if (response.IsSuccessStatusCode)
+            {
+                await DisplayAlert("Éxito", "Contraseña actualizada correctamente.", "OK");
+            }
+            else
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                await DisplayAlert("Error", "No se pudo actualizar la contraseña. Verifica que la contraseña actual sea correcta.", "OK");
+            }
+        }
+        catch (Exception ex)
+        {
+            await DisplayAlert("Error", $"Error: {ex.Message}", "OK");
+        }
+    }
+
+    #endregion
+
     private async void BtnUpload_Clicked(object sender, EventArgs e)
     {
+        if (_role == "Visitante")
+        {
+            await DisplayAlert("Permiso Denegado", "Los usuarios visitantes solo tienen permisos de descarga.", "OK");
+            return;
+        }
+
         try
         {
             var result = await FilePicker.Default.PickAsync(new PickOptions { PickerTitle = "Seleccionar archivo" });
@@ -255,7 +400,15 @@ public partial class MainPage : ContentPage
     {
         if (sender is Button btn && btn.CommandParameter is ArchivoDTO dto)
         {
-            string action = await DisplayActionSheet($"Opciones: {dto.Nombre}", "Cancelar", "Eliminar", "Descargar", "Detalles");
+            string action;
+            if (_role == "Visitante")
+            {
+                action = await DisplayActionSheet($"Opciones: {dto.Nombre}", "Cancelar", null, "Descargar", "Detalles");
+            }
+            else
+            {
+                action = await DisplayActionSheet($"Opciones: {dto.Nombre}", "Cancelar", "Eliminar", "Descargar", "Detalles");
+            }
 
             if (action == "Descargar")
             {
@@ -292,6 +445,12 @@ public partial class MainPage : ContentPage
             }
             else if (action == "Eliminar")
             {
+                if (_role == "Visitante")
+                {
+                    await DisplayAlert("Permiso Denegado", "Los visitantes no pueden eliminar archivos.", "OK");
+                    return;
+                }
+
                 bool confirm = await DisplayAlert("Confirmar", $"¿Seguro que deseas eliminar '{dto.Nombre}'?", "Sí", "No");
                 if (confirm)
                 {

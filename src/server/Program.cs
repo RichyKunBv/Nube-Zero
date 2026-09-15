@@ -101,20 +101,51 @@ namespace NubeZero.Server
                     return;
                 }
 
-                string username = null;
+                AuthSession session = null;
                 if (request.Url.AbsolutePath.StartsWith("/api/") && request.Url.AbsolutePath != "/api/status")
                 {
-                    username = _authInterceptor.ValidateRequest(request);
-                    if (username == null)
+                    session = _authInterceptor.ValidateSession(request);
+                    if (session == null)
                     {
                         await _authInterceptor.WriteUnauthorizedAsync(response);
                         return;
                     }
                 }
 
-                if (request.Url.AbsolutePath == "/api/users/add")
+                // Rutas de administración y usuarios
+                if (request.Url.AbsolutePath == "/api/users" && request.HttpMethod == "GET")
                 {
-                    await _authController.HandleRegisterAsync(context);
+                    if (session.Role != "Admin")
+                    {
+                        await _authInterceptor.WriteForbiddenAsync(response, "Solo los administradores pueden listar usuarios.");
+                        return;
+                    }
+                    await _authController.HandleListUsersAsync(context);
+                    return;
+                }
+                else if (request.Url.AbsolutePath == "/api/users/add" && request.HttpMethod == "POST")
+                {
+                    if (session.Role != "Admin")
+                    {
+                        await _authInterceptor.WriteForbiddenAsync(response, "Solo los administradores pueden registrar usuarios.");
+                        return;
+                    }
+                    await _authController.HandleAddUserAsync(context);
+                    return;
+                }
+                else if (request.Url.AbsolutePath == "/api/users/delete" && request.HttpMethod == "DELETE")
+                {
+                    if (session.Role != "Admin")
+                    {
+                        await _authInterceptor.WriteForbiddenAsync(response, "Solo los administradores pueden eliminar usuarios.");
+                        return;
+                    }
+                    await _authController.HandleDeleteUserAsync(context, session.Username);
+                    return;
+                }
+                else if (request.Url.AbsolutePath == "/api/users/password" && request.HttpMethod == "POST")
+                {
+                    await _authController.HandleChangePasswordAsync(context, session.Username, session.Role);
                     return;
                 }
 
@@ -131,18 +162,38 @@ namespace NubeZero.Server
                 }
                 else if (request.Url.AbsolutePath == "/api/upload" && request.HttpMethod == "POST")
                 {
-                    await _fileController.HandleUploadAsync(context, reqPath, username);
+                    if (session.Role == "Visitante")
+                    {
+                        await _authInterceptor.WriteForbiddenAsync(response, "Los visitantes solo tienen permisos de descarga.");
+                        return;
+                    }
+                    await _fileController.HandleUploadAsync(context, reqPath, session.Username);
                 }
                 else if (request.Url.AbsolutePath == "/api/delete" && request.HttpMethod == "DELETE")
                 {
+                    if (session.Role == "Visitante")
+                    {
+                        await _authInterceptor.WriteForbiddenAsync(response, "Los visitantes solo tienen permisos de descarga.");
+                        return;
+                    }
                     await _fileController.HandleDeleteAsync(context, reqPath);
                 }
                 else if (request.Url.AbsolutePath == "/api/folder" && request.HttpMethod == "POST")
                 {
+                    if (session.Role == "Visitante")
+                    {
+                        await _authInterceptor.WriteForbiddenAsync(response, "Los visitantes solo tienen permisos de descarga.");
+                        return;
+                    }
                     await _fileController.HandleCreateFolderAsync(context, reqPath);
                 }
                 else if (request.Url.AbsolutePath == "/api/rename" && request.HttpMethod == "POST")
                 {
+                    if (session.Role == "Visitante")
+                    {
+                        await _authInterceptor.WriteForbiddenAsync(response, "Los visitantes solo tienen permisos de descarga.");
+                        return;
+                    }
                     string newName = request.QueryString["newname"] ?? "";
                     await _fileController.HandleRenameAsync(context, reqPath, newName);
                 }
