@@ -256,9 +256,38 @@ function action_uninstall() {
   print_msg "Desinstalación completada."
 }
 
+function action_update_cli() {
+  print_msg "Actualizando solo la herramienta de línea de comandos (CLI nubezero)..."
+  
+  mount -o remount,rw / 2>/dev/null || true
+  mount -o remount,rw /boot/firmware 2>/dev/null || true
+
+  local tmp_cli=$(mktemp)
+  local download_url="https://raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/main/cli/nubezero.sh"
+
+  if wget -q "$download_url" -O "$tmp_cli" 2>/dev/null || curl -sL "$download_url" -o "$tmp_cli" 2>/dev/null; then
+    if bash -n "$tmp_cli"; then
+      cp "$tmp_cli" /usr/local/bin/nubezero
+      chmod +x /usr/local/bin/nubezero
+      rm -f "$tmp_cli"
+      print_msg "¡Herramienta CLI (/usr/local/bin/nubezero) actualizada con éxito desde main!"
+    else
+      echo -e "${RED}Error: El script descargado contiene errores de sintaxis.${NC}"
+      rm -f "$tmp_cli"
+      exit 1
+    fi
+  else
+    echo -e "${RED}Error: No se pudo descargar el script CLI desde GitHub.${NC}"
+    rm -f "$tmp_cli"
+    exit 1
+  fi
+}
+
 # Ejecución por argumentos o interactiva
 if [ "$1" == "update" ]; then
   action_update
+elif [ "$1" == "update-cli" ]; then
+  action_update_cli
 elif [ "$1" == "install" ]; then
   action_install
 elif [ "$1" == "uninstall" ]; then
@@ -267,16 +296,18 @@ else
   echo "Elige una opción:"
   echo "  1) Instalar Servidor Nube-Zero"
   echo "  2) Actualizar Servidor (Última Release)"
-  echo "  3) Desinstalar Servidor"
-  echo "  4) Salir"
+  echo "  3) Actualizar solo herramienta CLI (desde main)"
+  echo "  4) Desinstalar Servidor"
+  echo "  5) Salir"
   echo -ne "Opción: "
   read OPTION
 
   case $OPTION in
     1) action_install ;;
     2) action_update ;;
-    3) action_uninstall ;;
-    4) exit 0 ;;
+    3) action_update_cli ;;
+    4) action_uninstall ;;
+    5) exit 0 ;;
     *) echo "Opción no válida."; exit 1 ;;
   esac
 fi
