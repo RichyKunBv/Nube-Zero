@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -12,6 +13,7 @@ public partial class MainPage : ContentPage
     private string _serverIp = string.Empty;
     private string _username = string.Empty;
     private string _role = "Estandar";
+    private List<DiscoveryResponse> _discoveredServers = new List<DiscoveryResponse>();
 
     public MainPage()
     {
@@ -21,6 +23,56 @@ public partial class MainPage : ContentPage
         Resources.Add("BytesToSizeConverter", new BytesToSizeConverter());
 
         _ = CheckExistingSessionAsync();
+    }
+
+    private async void BtnDiscoverMobile_Clicked(object sender, EventArgs e)
+    {
+        BtnDiscoverMobile.IsEnabled = false;
+        BtnDiscoverMobile.Text = "⏳";
+        TxtDiscoveryStatus.Text = "Buscando servidores en la red local...";
+        TxtDiscoveryStatus.IsVisible = true;
+        PkrDiscoveredServers.IsVisible = false;
+
+        try
+        {
+            var servers = await NetworkDiscoveryClient.DiscoverServersAsync(timeoutMs: 1500);
+            _discoveredServers = servers;
+
+            if (servers.Count == 0)
+            {
+                TxtDiscoveryStatus.Text = "No se detectaron servidores. Ingresa la IP manualmente.";
+            }
+            else if (servers.Count == 1)
+            {
+                var s = servers[0];
+                TxtServerIp.Text = s.IpAddress;
+                TxtDiscoveryStatus.Text = $"✓ Servidor encontrado: {s.ServerName} ({s.IpAddress})";
+            }
+            else
+            {
+                TxtDiscoveryStatus.Text = $"Se encontraron {servers.Count} servidores:";
+                PkrDiscoveredServers.ItemsSource = servers.Select(s => $"☁️ {s.ServerName} ({s.IpAddress}:{s.Port})").ToList();
+                PkrDiscoveredServers.IsVisible = true;
+                PkrDiscoveredServers.SelectedIndex = 0;
+            }
+        }
+        catch (Exception ex)
+        {
+            TxtDiscoveryStatus.Text = $"Error al buscar: {ex.Message}";
+        }
+        finally
+        {
+            BtnDiscoverMobile.IsEnabled = true;
+            BtnDiscoverMobile.Text = "🔍";
+        }
+    }
+
+    private void PkrDiscoveredServers_SelectedIndexChanged(object sender, EventArgs e)
+    {
+        if (PkrDiscoveredServers.SelectedIndex >= 0 && PkrDiscoveredServers.SelectedIndex < _discoveredServers.Count)
+        {
+            TxtServerIp.Text = _discoveredServers[PkrDiscoveredServers.SelectedIndex].IpAddress;
+        }
     }
 
     private async Task CheckExistingSessionAsync()

@@ -147,7 +147,11 @@ function fetch_and_install() {
 
 function setup_systemd() {
   local port=$1
-  print_msg "Configurando servicio Systemd (Puerto $port)..."
+  local name=$2
+  if [ -z "$name" ]; then
+    name=$(hostname)
+  fi
+  print_msg "Configurando servicio Systemd (Puerto $port, Nombre: $name)..."
   
   cat <<EOF > "$SERVICE_FILE"
 [Unit]
@@ -158,7 +162,7 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=$INSTALL_DIR
-ExecStart=/usr/bin/mono $BIN_DIR/NubeZero.Server.exe --port $port
+ExecStart=/usr/bin/mono $BIN_DIR/NubeZero.Server.exe --port $port --name "$name"
 Restart=always
 RestartSec=10
 
@@ -175,6 +179,12 @@ EOF
 }
 
 function action_install() {
+  echo -ne "Introduce el nombre para identificar este servidor en la red (Por defecto $(hostname)): "
+  read NAME_INPUT
+  if [ -z "$NAME_INPUT" ]; then
+    NAME_INPUT=$(hostname)
+  fi
+
   echo -ne "Introduce el puerto en el que deseas que corra el servidor (Por defecto 8080): "
   read PORT_INPUT
   if [ -z "$PORT_INPUT" ]; then
@@ -183,7 +193,7 @@ function action_install() {
   
   install_dependencies
   fetch_and_install
-  setup_systemd "$PORT_INPUT"
+  setup_systemd "$PORT_INPUT" "$NAME_INPUT"
   
   check_multiple_installations
 }
@@ -202,11 +212,15 @@ function action_update() {
   fi
   
   CURRENT_STORAGE=$(grep "ExecStart" "$SERVICE_FILE" | grep -oP '(?<=--storage )\S+')
+  CURRENT_NAME=$(grep "ExecStart" "$SERVICE_FILE" | grep -oP '(?<=--name ")[^"]+' || grep "ExecStart" "$SERVICE_FILE" | grep -oP '(?<=--name )\S+')
   
   # Forzar que el sistema siempre apunte a la ruta de instalación oficial
   NEW_EXEC_START="ExecStart=/usr/bin/mono $INSTALL_DIR/bin/NubeZero.Server.exe --port $CURRENT_PORT"
   if [ -n "$CURRENT_STORAGE" ]; then
       NEW_EXEC_START="$NEW_EXEC_START --storage $CURRENT_STORAGE"
+  fi
+  if [ -n "$CURRENT_NAME" ]; then
+      NEW_EXEC_START="$NEW_EXEC_START --name \"$CURRENT_NAME\""
   fi
   sed -i "s|ExecStart=.*|$NEW_EXEC_START|g" "$SERVICE_FILE"
   systemctl daemon-reload

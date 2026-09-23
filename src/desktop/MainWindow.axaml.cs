@@ -34,6 +34,62 @@ public partial class MainWindow : Window
         AddHandler(DragDrop.DropEvent, OnDrop);
     }
 
+    private async void BtnDiscover_Click(object? sender, RoutedEventArgs e)
+    {
+        BtnDiscover.IsEnabled = false;
+        BtnDiscover.Content = "⏳";
+        TxtDiscoveryStatus.Text = "Buscando servidores en la red local...";
+        TxtDiscoveryStatus.IsVisible = true;
+        CmbDiscoveredServers.IsVisible = false;
+
+        try
+        {
+            var servers = await NetworkDiscoveryClient.DiscoverServersAsync(timeoutMs: 1500);
+            if (servers.Count == 0)
+            {
+                TxtDiscoveryStatus.Text = "No se detectaron servidores. Ingresa la IP manualmente.";
+            }
+            else if (servers.Count == 1)
+            {
+                var s = servers[0];
+                TxtServerUrl.Text = $"http://{s.IpAddress}:{s.Port}";
+                TxtDiscoveryStatus.Text = $"✓ Servidor encontrado: {s.ServerName} ({s.IpAddress})";
+            }
+            else
+            {
+                TxtDiscoveryStatus.Text = $"Se encontraron {servers.Count} servidores:";
+                CmbDiscoveredServers.Items.Clear();
+                foreach (var s in servers)
+                {
+                    CmbDiscoveredServers.Items.Add(new ComboBoxItem
+                    {
+                        Content = $"☁️ {s.ServerName} ({s.IpAddress}:{s.Port}) - {s.Version}",
+                        Tag = $"http://{s.IpAddress}:{s.Port}"
+                    });
+                }
+                CmbDiscoveredServers.IsVisible = true;
+                CmbDiscoveredServers.SelectedIndex = 0;
+            }
+        }
+        catch (Exception ex)
+        {
+            TxtDiscoveryStatus.Text = $"Error al buscar: {ex.Message}";
+        }
+        finally
+        {
+            BtnDiscover.IsEnabled = true;
+            BtnDiscover.Content = "🔍";
+        }
+    }
+
+    private void CmbDiscoveredServers_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (CmbDiscoveredServers.SelectedItem is ComboBoxItem item && item.Tag is string url)
+        {
+            TxtServerUrl.Text = url;
+        }
+    }
+
     private async void BtnLogin_Click(object? sender, RoutedEventArgs e)
     {
         string user = TxtUser.Text?.Trim() ?? "";

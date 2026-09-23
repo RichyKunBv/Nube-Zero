@@ -2,7 +2,7 @@
 
 # Nube-Zero ☁️
 
-[![Versión](https://img.shields.io/badge/Versión-v0.5.0-blue.svg)](https://github.com/RichyKunBv/Nube-Zero)
+[![Versión](https://img.shields.io/badge/Versión-v0.6.0-blue.svg)](https://github.com/RichyKunBv/Nube-Zero)
 [![Status](https://img.shields.io/badge/Estado-Desarrollo-yellow.svg)](https://github.com/RichyKunBv/Nube-Zero)
 [![Licencia](https://img.shields.io/badge/Licencia-Apache_2.0-orange.svg)](https://github.com/RichyKunBv/Nube-Zero/blob/main/LICENSE)
 ---
@@ -12,6 +12,19 @@
 [![Lenguaje_Cliente](https://img.shields.io/badge/Lenguaje_Cliente-C%23_.NET_10.0-lightgrey.svg)](https://dotnet.microsoft.com/es-es/download/dotnet/10.0)
 [![GUI_Desktop](https://img.shields.io/badge/GUI_Desktop-Avalonia_UI-purple.svg)](https://avaloniaui.net)
 [![GUI_Mobile](https://img.shields.io/badge/GUI_Mobile-MAUI-purple.svg)](https://avaloniaui.net)
+---
+
+## ✨ Características Principales
+
+- 🔍 **Descubrimiento Automático Silencioso (v0.6.0)**: Encuentra tus servidores Nube-Zero en la red local bajo demanda con un solo clic (`🔍`). Funciona mediante un protocolo reactivo *Probe-Response* por UDP con clave de autenticación: **cero saturación de Wi-Fi, cero pings continuos y 0% de uso de CPU en reposo**.
+- 🏷️ **Soporte Multi-servidor y Nombres Personalizados**: Cada Raspberry Pi puede tener su propio nombre identificador (`--name "Mi Servidor"`), facilitando elegir entre múltiples servidores desde la pantalla de inicio de los clientes.
+- 👥 **Sistema de Roles y Usuarios Granular (v0.5.0)**:
+  - **Admin**: Control total, creación y eliminación de usuarios, gestión de accesos.
+  - **Estándar**: Subida, descarga, navegación y eliminación de archivos.
+  - **Visitante**: Modo solo lectura/descarga, ideal para invitados o consultas temporales.
+- 🛡️ **Blindaje MicroSD Solo Lectura (`ro`)**: Protección contra corrupción por apagones y cero desgaste de la tarjeta de memoria, enviando escrituras y logs pesados a una memoria USB por OTG.
+- 🪶 **Monoproceso Ultra Ligero**: Todo el daemon corre en un único proceso en C# nativo sobre Mono (`net472`), diseñado meticulosamente para el hardware limitado de la Raspberry Pi Zero (W / 2 W) de 512 MB de RAM.
+
 ---
 
 ## 🚀 Instalación y Descargas
@@ -40,6 +53,8 @@ sudo bash setup_server.sh
 ```
 
 *(Recuerda ejecutarlo con permisos de administrador o `sudo`)*
+
+El asistente te solicitará definir un **nombre identificador amigable** para tu servidor en la red (ej. *PiZero-Sala*) y el puerto HTTP deseado.
 
 ---
 ### Conexión Rápida por SSH (`ssh.sh`)

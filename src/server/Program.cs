@@ -16,11 +16,16 @@ namespace NubeZero.Server
         private static DatabaseContext _dbContext;
         private static AuthController _authController;
         private static AuthInterceptor _authInterceptor;
+        private static DiscoveryService _discoveryService;
 
         static async Task Main(string[] args)
         {
             int port = 8080;
             string storagePath = null;
+            string serverName = null;
+            int discoveryPort = NubeZero.Shared.DiscoveryConstants.DefaultPort;
+            string discoveryKey = NubeZero.Shared.DiscoveryConstants.DefaultMagicKey;
+
             for (int i = 0; i < args.Length; i++)
             {
                 if (args[i] == "--port" && i + 1 < args.Length && int.TryParse(args[i + 1], out int p))
@@ -31,6 +36,18 @@ namespace NubeZero.Server
                 {
                     storagePath = args[i + 1];
                 }
+                else if (args[i] == "--name" && i + 1 < args.Length)
+                {
+                    serverName = args[i + 1];
+                }
+                else if (args[i] == "--discovery-port" && i + 1 < args.Length && int.TryParse(args[i + 1], out int dp))
+                {
+                    discoveryPort = dp;
+                }
+                else if (args[i] == "--discovery-key" && i + 1 < args.Length)
+                {
+                    discoveryKey = args[i + 1];
+                }
             }
 
             Console.WriteLine($"Iniciando servidor Nube-Zero en el puerto {port}...");
@@ -40,6 +57,8 @@ namespace NubeZero.Server
             _authController = new AuthController(_dbContext);
             _authInterceptor = new AuthInterceptor(_dbContext);
             _fileController = new FileController(_storageService, _dbContext);
+            _discoveryService = new DiscoveryService(port, serverName, discoveryPort, discoveryKey);
+            _discoveryService.Start();
             
             using (HttpListener listener = new HttpListener())
             {
@@ -67,6 +86,7 @@ namespace NubeZero.Server
                 catch (HttpListenerException) { }
                 finally
                 {
+                    _discoveryService?.Stop();
                     listener.Stop();
                 }
             }

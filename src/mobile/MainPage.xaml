@@ -75,7 +75,14 @@
                     <Label Text="☁️ Nube-Zero" FontSize="28" FontAttributes="Bold" HorizontalOptions="Center" TextColor="White"/>
                     <Label Text="Inicia sesión en tu Pi Zero" HorizontalOptions="Center" TextColor="#A0A0A0" Margin="0,0,0,10"/>
                     
-                    <Entry x:Name="TxtServerIp" Placeholder="IP del Servidor (Ej: 192.168.1.100)" Text="192.168.1.100" BackgroundColor="#10FFFFFF" TextColor="White" PlaceholderColor="#80FFFFFF" ReturnType="Next" Completed="TxtServerIp_Completed" />
+                    <Grid ColumnDefinitions="*, Auto">
+                        <Entry Grid.Column="0" x:Name="TxtServerIp" Placeholder="IP del Servidor (Ej: 192.168.1.100)" Text="192.168.1.100" BackgroundColor="#10FFFFFF" TextColor="White" PlaceholderColor="#80FFFFFF" ReturnType="Next" Completed="TxtServerIp_Completed" />
+                        <Button Grid.Column="1" x:Name="BtnDiscoverMobile" Text="🔍" Clicked="BtnDiscoverMobile_Clicked" BackgroundColor="#30FFFFFF" TextColor="White" WidthRequest="44" HeightRequest="44" CornerRadius="8" Margin="8,0,0,0" Padding="0" />
+                    </Grid>
+                    
+                    <Picker x:Name="PkrDiscoveredServers" IsVisible="False" Title="Selecciona un servidor" TextColor="White" TitleColor="#A0A0A0" BackgroundColor="#10FFFFFF" SelectedIndexChanged="PkrDiscoveredServers_SelectedIndexChanged"/>
+                    <Label x:Name="TxtDiscoveryStatus" TextColor="#00D2FF" FontSize="11" HorizontalOptions="Center" IsVisible="False"/>
+
                     <Entry x:Name="TxtUser" Placeholder="Usuario" BackgroundColor="#10FFFFFF" TextColor="White" PlaceholderColor="#80FFFFFF" ReturnType="Next" Completed="TxtUser_Completed" />
                     <Entry x:Name="TxtPassword" Placeholder="Contraseña" IsPassword="True" BackgroundColor="#10FFFFFF" TextColor="White" PlaceholderColor="#80FFFFFF" ReturnType="Done" Completed="BtnLogin_Clicked" />
                     

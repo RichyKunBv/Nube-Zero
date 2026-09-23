@@ -2,6 +2,6 @@ namespace NubeZero.Shared
 {
     public static class AppVersion
     {
-        public static string Texto { get; set; } = "v0.5.0";
+        public static string Texto { get; set; } = "v0.6.0";
     }
 }

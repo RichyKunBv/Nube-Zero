@@ -120,7 +120,14 @@
                     <TextBlock Text="☁️ Nube-Zero" FontSize="28" FontWeight="Black" HorizontalAlignment="Center" Foreground="White"/>
                     <TextBlock Text="Inicia sesión para continuar" HorizontalAlignment="Center" Foreground="#A0A0A0" Margin="0,0,0,10"/>
                     
-                    <TextBox Name="TxtServerUrl" Text="http://192.168.1.94:8080" PlaceholderText="URL Servidor (ej. http://192.168.1.94:8080)" Background="#10FFFFFF" Foreground="White" CornerRadius="8" Padding="10"/>
+                    <Grid ColumnDefinitions="*, Auto">
+                        <TextBox Grid.Column="0" Name="TxtServerUrl" Text="http://192.168.1.94:8080" PlaceholderText="URL Servidor (ej. http://192.168.1.94:8080)" Background="#10FFFFFF" Foreground="White" CornerRadius="8" Padding="10"/>
+                        <Button Grid.Column="1" Name="BtnDiscover" ToolTip.Tip="Buscar servidores en la red local" Content="🔍" Click="BtnDiscover_Click" Width="42" Margin="8,0,0,0" CornerRadius="8" Background="#30FFFFFF" Foreground="White" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+                    </Grid>
+                    
+                    <ComboBox Name="CmbDiscoveredServers" IsVisible="False" PlaceholderText="Servidores encontrados..." Background="#10FFFFFF" Foreground="White" CornerRadius="8" HorizontalAlignment="Stretch" SelectionChanged="CmbDiscoveredServers_SelectionChanged"/>
+                    <TextBlock Name="TxtDiscoveryStatus" Foreground="#00D2FF" FontSize="11" HorizontalAlignment="Center" IsVisible="False" TextWrapping="Wrap"/>
+
                     <TextBox Name="TxtUser" PlaceholderText="Usuario" Background="#10FFFFFF" Foreground="White" CornerRadius="8" Padding="10"/>
                     <TextBox Name="TxtPassword" PlaceholderText="Contraseña" PasswordChar="•" Background="#10FFFFFF" Foreground="White" CornerRadius="8" Padding="10"/>
                     

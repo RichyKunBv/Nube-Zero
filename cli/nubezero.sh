@@ -61,11 +61,14 @@ function run_config() {
           mount -a
           chown -R root:root "$MOUNT_DIR"
           
-          # Actualizar systemd manteniendo el puerto actual
+          # Actualizar systemd manteniendo el puerto y nombre actual
           CURRENT_PORT=$(grep "ExecStart" "$SERVICE_FILE" | grep -oP '(?<=--port )\d+')
           if [ -z "$CURRENT_PORT" ]; then CURRENT_PORT=8080; fi
+          CURRENT_NAME=$(grep "ExecStart" "$SERVICE_FILE" | grep -oP '(?<=--name ")[^"]+' || grep "ExecStart" "$SERVICE_FILE" | grep -oP '(?<=--name )\S+')
+          EXTRA_NAME=""
+          if [ -n "$CURRENT_NAME" ]; then EXTRA_NAME=" --name \"$CURRENT_NAME\""; fi
           
-          sed -i "s|ExecStart=.*|ExecStart=/usr/bin/mono $INSTALL_DIR/bin/NubeZero.Server.exe --port $CURRENT_PORT --storage $MOUNT_DIR|g" "$SERVICE_FILE"
+          sed -i "s|ExecStart=.*|ExecStart=/usr/bin/mono $INSTALL_DIR/bin/NubeZero.Server.exe --port $CURRENT_PORT --storage $MOUNT_DIR$EXTRA_NAME|g" "$SERVICE_FILE"
           echo -e "${GREEN}Almacenamiento configurado en $MOUNT_DIR${NC}"
           
           echo -e "\n${YELLOW}¿Deseas activar el Blindaje de Almacenamiento (Modo Solo Lectura en la MicroSD para evitar desgaste)? [y/N]${NC}"
@@ -112,8 +115,11 @@ function run_config() {
           
           CURRENT_PORT=$(grep "ExecStart" "$SERVICE_FILE" | grep -oP '(?<=--port )\d+')
           if [ -z "$CURRENT_PORT" ]; then CURRENT_PORT=8080; fi
+          CURRENT_NAME=$(grep "ExecStart" "$SERVICE_FILE" | grep -oP '(?<=--name ")[^"]+' || grep "ExecStart" "$SERVICE_FILE" | grep -oP '(?<=--name )\S+')
+          EXTRA_NAME=""
+          if [ -n "$CURRENT_NAME" ]; then EXTRA_NAME=" --name \"$CURRENT_NAME\""; fi
           
-          sed -i "s|ExecStart=.*|ExecStart=/usr/bin/mono $INSTALL_DIR/bin/NubeZero.Server.exe --port $CURRENT_PORT|g" "$SERVICE_FILE"
+          sed -i "s|ExecStart=.*|ExecStart=/usr/bin/mono $INSTALL_DIR/bin/NubeZero.Server.exe --port $CURRENT_PORT$EXTRA_NAME|g" "$SERVICE_FILE"
           echo -e "${GREEN}Se ha vuelto al almacenamiento de la MicroSD.${NC}"
       fi
   fi
