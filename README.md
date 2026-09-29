@@ -17,6 +17,7 @@
 ## ✨ Características Principales
 
 - 📦 **Subida de archivos grandes (v0.7.0)**: transferencias en streaming con un timeout ampliado para evitar cortes en archivos de varios cientos de MB.
+- 🔐 **Recordar credenciales de forma segura (v0.7.0)**: opción para guardar la contraseña en el almacenamiento seguro de Android o en el llavero de macOS y recuperar la sesión al volver a abrir la aplicación.
 - 🔍 **Descubrimiento Automático Silencioso (v0.6.0)**: Encuentra tus servidores Nube-Zero en la red local bajo demanda con un solo clic (`🔍`). Funciona mediante un protocolo reactivo *Probe-Response* por UDP con clave de autenticación: **cero saturación de Wi-Fi, cero pings continuos y 0% de uso de CPU en reposo**.
 - 🏷️ **Soporte Multi-servidor y Nombres Personalizados**: Cada Raspberry Pi puede tener su propio nombre identificador (`--name "Mi Servidor"`), facilitando elegir entre múltiples servidores desde la pantalla de inicio de los clientes.
 - 👥 **Sistema de Roles y Usuarios Granular (v0.5.0)**:
