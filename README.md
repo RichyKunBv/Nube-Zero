@@ -2,7 +2,7 @@
 
 # Nube-Zero ☁️
 
-[![Versión](https://img.shields.io/badge/Versión-v0.6.0-blue.svg)](https://github.com/RichyKunBv/Nube-Zero)
+[![Versión](https://img.shields.io/badge/Versión-v0.7.0-blue.svg)](https://github.com/RichyKunBv/Nube-Zero)
 [![Status](https://img.shields.io/badge/Estado-Desarrollo-yellow.svg)](https://github.com/RichyKunBv/Nube-Zero)
 [![Licencia](https://img.shields.io/badge/Licencia-Apache_2.0-orange.svg)](https://github.com/RichyKunBv/Nube-Zero/blob/main/LICENSE)
 ---
@@ -16,6 +16,7 @@
 
 ## ✨ Características Principales
 
+- 📦 **Subida de archivos grandes (v0.7.0)**: transferencias en streaming con un timeout ampliado para evitar cortes en archivos de varios cientos de MB.
 - 🔍 **Descubrimiento Automático Silencioso (v0.6.0)**: Encuentra tus servidores Nube-Zero en la red local bajo demanda con un solo clic (`🔍`). Funciona mediante un protocolo reactivo *Probe-Response* por UDP con clave de autenticación: **cero saturación de Wi-Fi, cero pings continuos y 0% de uso de CPU en reposo**.
 - 🏷️ **Soporte Multi-servidor y Nombres Personalizados**: Cada Raspberry Pi puede tener su propio nombre identificador (`--name "Mi Servidor"`), facilitando elegir entre múltiples servidores desde la pantalla de inicio de los clientes.
 - 👥 **Sistema de Roles y Usuarios Granular (v0.5.0)**:
@@ -37,6 +38,8 @@ Nube-Zero cuenta con un cliente nativo súper rápido construido en Avalonia UI.
 | :---: | :---: | :---: | :---: |
 | [![Windows ARM](https://img.shields.io/badge/Windows%20ARM-000000?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/RichyKunBv/Nube-Zero/releases/latest/download/NubeZero-arm64.exe) | [![macOS ARM](https://img.shields.io/badge/macOS%20ARM-000000?style=for-the-badge&logoColor=white)](https://github.com/RichyKunBv/Nube-Zero/releases/latest/download/NubeZero-arm64.dmg) | [![Linux ARM](https://img.shields.io/badge/Linux%20ARM-000000?style=for-the-badge&logoColor=white)](https://github.com/RichyKunBv/Nube-Zero/releases/latest/download/NubeZero-arm64.AppImage) | [![Android APK](https://img.shields.io/badge/Android%20APK-000000?style=for-the-badge&logo=android&logoColor=white)](https://github.com/RichyKunBv/Nube-Zero/releases/latest/download/NubeZero.apk) |
 | [![Windows X64](https://img.shields.io/badge/Windows%20X64-000000?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/RichyKunBv/Nube-Zero/releases/latest/download/NubeZero-x64.exe) | [![macOS X64](https://img.shields.io/badge/macOS%20X64-000000?style=for-the-badge&logoColor=white)](https://github.com/RichyKunBv/Nube-Zero/releases/latest/download/NubeZero-x64.dmg) | [![Linux X64](https://img.shields.io/badge/Linux%20X64-000000?style=for-the-badge&logoColor=white)](https://github.com/RichyKunBv/Nube-Zero/releases/latest/download/NubeZero-x64.AppImage) | |
+
+La firma Android no requiere licencia de pago. Ejecuta `bash scripts/build/generate_android_signing_key.sh` para crear un keystore privado fuera del repositorio; después configura `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` y `ANDROID_KEY_PASSWORD` en GitHub Actions y conserva ese keystore para todos los releases. Para macOS, si no configuras `MACOS_CERTIFICATE_BASE64`, `MACOS_CERTIFICATE_PASSWORD` y `MACOS_CODESIGN_IDENTITY`, CI usará firma ad-hoc gratuita; macOS puede mostrar advertencias y pedir autorización al abrir la app. Con Developer ID esos avisos se reducen, pero requiere el programa de Apple. La identidad del bundle permanece como `com.esmesolutions.nubezero`.
 
 ### Servidor (Raspberry Pi / Linux)
 

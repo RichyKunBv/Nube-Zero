@@ -104,13 +104,13 @@ actualizar_macOS() {
 
     echo "Limpiando atributos y firmando aplicaciones..."
 
-    # 5. Firmar ARM64
+    # 5. Firmar ambas arquitecturas con una identidad estable si está configurada.
+    local code_sign_identity="${MACOS_CODESIGN_IDENTITY:--}"
     xattr -cr "$MACOS_ARM_APP"
-    codesign --force --deep --sign - "$MACOS_ARM_APP"
+    codesign --force --deep --sign "$code_sign_identity" --identifier com.esmesolutions.nubezero "$MACOS_ARM_APP"
 
-    # 6. Firmar X86_64
     xattr -cr "$MACOS_X64_APP"
-    codesign --force --deep --sign - "$MACOS_X64_APP"
+    codesign --force --deep --sign "$code_sign_identity" --identifier com.esmesolutions.nubezero "$MACOS_X64_APP"
 
     echo "=== ¡Listo! NubeZero v$VERSION empaquetado para ambas arquitecturas ==="
 }

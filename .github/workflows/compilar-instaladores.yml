@@ -74,6 +74,21 @@ jobs:
         if: matrix.rid == 'android'
         run: dotnet workload install maui-android
 
+      - name: Preparar firma Android
+        if: matrix.rid == 'android'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ] || [ -z "$ANDROID_KEY_PASSWORD" ]; then
+            echo "::error::Configura los secretos ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS y ANDROID_KEY_PASSWORD para firmar APKs actualizables."
+            exit 1
+          fi
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/nubezero-release.keystore"
+          chmod 600 "$RUNNER_TEMP/nubezero-release.keystore"
+
       - name: Compilar aplicación (Desktop)
         if: matrix.rid != 'android'
         run: |
@@ -82,9 +97,14 @@ jobs:
 
       - name: Compilar aplicación (Mobile APK)
         if: matrix.rid == 'android'
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/nubezero-release.keystore
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           cd src/mobile
-          dotnet publish -f net10.0-android -c Release -p:AndroidPackageFormat=apk -o publish_out
+          dotnet publish -f net10.0-android -c Release -p:AndroidPackageFormat=apk -p:AndroidKeyStore=true -p:AndroidSigningKeyStore="$ANDROID_KEYSTORE_PATH" -p:AndroidSigningStorePass="$ANDROID_KEYSTORE_PASSWORD" -p:AndroidSigningKeyAlias="$ANDROID_KEY_ALIAS" -p:AndroidSigningKeyPass="$ANDROID_KEY_PASSWORD" -o publish_out
           APK_FILE=$(find publish_out -name "*-Signed.apk" | head -n 1)
           if [ -z "$APK_FILE" ]; then
             APK_FILE=$(find publish_out -name "*.apk" | head -n 1)
@@ -206,8 +226,36 @@ jobs:
 
 
       # --- EMPAQUETADO MACOS ---
+      - name: Preparar firma macOS (opcional)
+        if: runner.os == 'macOS'
+        env:
+          MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
+        run: |
+          if [ -z "$MACOS_CERTIFICATE_BASE64" ] && [ -z "$MACOS_CERTIFICATE_PASSWORD" ] && [ -z "$MACOS_CODESIGN_IDENTITY" ]; then
+            echo "::warning::No hay certificado Developer ID; el bundle se firmará ad-hoc y macOS puede mostrar advertencias."
+          elif [ -z "$MACOS_CERTIFICATE_BASE64" ] || [ -z "$MACOS_CERTIFICATE_PASSWORD" ] || [ -z "$MACOS_CODESIGN_IDENTITY" ]; then
+            echo "::error::Configura los tres secretos de macOS o elimina los tres para usar firma ad-hoc."
+            exit 1
+          else
+            CERTIFICATE_PATH="$RUNNER_TEMP/nubezero-developer-id.p12"
+            KEYCHAIN_PATH="$RUNNER_TEMP/nubezero-signing.keychain-db"
+            KEYCHAIN_PASSWORD=$(openssl rand -base64 24)
+            printf '%s' "$MACOS_CERTIFICATE_BASE64" | base64 -D > "$CERTIFICATE_PATH"
+            security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+            security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+            security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+            security import "$CERTIFICATE_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -k "$KEYCHAIN_PATH"
+            security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+            security list-keychains -d user -s "$KEYCHAIN_PATH"
+            security default-keychain -d user -s "$KEYCHAIN_PATH"
+          fi
+
       - name: Preparar App Bundle (macOS)
         if: runner.os == 'macOS'
+        env:
+          MACOS_CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
         run: |
           APP_DIR="NubeZero.app"
           mkdir -p "$APP_DIR/Contents/MacOS"
@@ -225,7 +273,7 @@ jobs:
           plutil -replace CFBundleIdentifier -string "com.esmesolutions.nubezero" "$APP_DIR/Contents/Info.plist"
           
           xattr -cr "$APP_DIR"
-          codesign --force --deep --sign - "$APP_DIR"
+          codesign --force --deep --sign "${MACOS_CODESIGN_IDENTITY:--}" --identifier com.esmesolutions.nubezero "$APP_DIR"
 
       - name: Generar DMG (macOS)
         if: runner.os == 'macOS'

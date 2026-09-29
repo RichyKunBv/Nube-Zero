@@ -77,13 +77,27 @@ public partial class MainPage : ContentPage
 
     private async Task CheckExistingSessionAsync()
     {
-        var savedIp = await SecureStorage.Default.GetAsync("server_ip");
-        var savedToken = await SecureStorage.Default.GetAsync("auth_token");
-        var savedUser = await SecureStorage.Default.GetAsync("auth_user");
-        var savedRole = await SecureStorage.Default.GetAsync("auth_role");
-
-        if (!string.IsNullOrEmpty(savedIp) && !string.IsNullOrEmpty(savedToken))
+        try
         {
+            var savedIp = await SecureStorage.Default.GetAsync("server_ip");
+            var savedToken = await SecureStorage.Default.GetAsync("auth_token");
+            var savedUser = await SecureStorage.Default.GetAsync("auth_user");
+            var savedRole = await SecureStorage.Default.GetAsync("auth_role");
+            var savedPassword = await SecureStorage.Default.GetAsync("auth_password");
+
+            if (!string.IsNullOrEmpty(savedIp) && !string.IsNullOrEmpty(savedUser) && !string.IsNullOrEmpty(savedPassword))
+            {
+                _serverIp = savedIp;
+                TxtServerIp.Text = savedIp;
+                TxtUser.Text = savedUser;
+                TxtPassword.Text = savedPassword;
+                ChkRememberPassword.IsChecked = true;
+                await AuthenticateAsync(savedUser, savedPassword);
+                return;
+            }
+
+            if (string.IsNullOrEmpty(savedIp) || string.IsNullOrEmpty(savedToken)) return;
+
             _serverIp = savedIp;
             _token = savedToken;
             _username = savedUser ?? "Usuario";
@@ -93,6 +107,18 @@ public partial class MainPage : ContentPage
             InitHttpClient();
             await TryConnectAsync();
         }
+        catch (Exception ex)
+        {
+            try
+            {
+                SecureStorage.Default.RemoveAll();
+            }
+            catch
+            {
+            }
+
+            ShowLoginError($"No se pudieron recuperar las credenciales guardadas: {ex.Message}");
+        }
     }
 
     private void InitHttpClient()
@@ -101,7 +127,11 @@ public partial class MainPage : ContentPage
         
         string cleanIp = _serverIp.Replace("http://", "").Replace("https://", "").Replace(":8080", "").TrimEnd('/');
         string baseAddress = $"http://{cleanIp}:8080";
-        _httpClient = new HttpClient { BaseAddress = new Uri(baseAddress) };
+        _httpClient = new HttpClient
+        {
+            BaseAddress = new Uri(baseAddress),
+            Timeout = TimeSpan.FromHours(2)
+        };
         if (!string.IsNullOrEmpty(_token))
         {
             _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _token);
@@ -122,36 +152,53 @@ public partial class MainPage : ContentPage
 
         try
         {
-            InitHttpClient();
-            var loginData = new { Username = user, Password = pass };
-            var content = new StringContent(JsonSerializer.Serialize(loginData), Encoding.UTF8, "application/json");
-            
-            var response = await _httpClient.PostAsync("/api/login", content);
-            if (response.IsSuccessStatusCode)
-            {
-                var json = await response.Content.ReadAsStringAsync();
-                var result = JsonSerializer.Deserialize<JsonElement>(json);
-                _token = result.GetProperty("token").GetString() ?? "";
-                _username = result.TryGetProperty("username", out var uProp) ? uProp.GetString() ?? user : user;
-                _role = result.TryGetProperty("role", out var rProp) ? rProp.GetString() ?? "Estandar" : "Estandar";
-                
-                await SecureStorage.Default.SetAsync("server_ip", _serverIp);
-                await SecureStorage.Default.SetAsync("auth_token", _token);
-                await SecureStorage.Default.SetAsync("auth_user", _username);
-                await SecureStorage.Default.SetAsync("auth_role", _role);
-                
-                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _token);
-                await TryConnectAsync();
-            }
-            else
-            {
-                ShowLoginError("Credenciales o IP incorrectos.");
-            }
+            await AuthenticateAsync(user, pass);
         }
         catch (Exception ex)
         {
             ShowLoginError($"Error de red: {ex.Message}");
         }
+    }
+
+    private async Task AuthenticateAsync(string user, string password)
+    {
+        InitHttpClient();
+        var loginData = new { Username = user, Password = password };
+        var content = new StringContent(JsonSerializer.Serialize(loginData), Encoding.UTF8, "application/json");
+        var response = await _httpClient.PostAsync("/api/login", content);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            ShowLoginError("Credenciales o IP incorrectos.");
+            return;
+        }
+
+        var json = await response.Content.ReadAsStringAsync();
+        var result = JsonSerializer.Deserialize<JsonElement>(json);
+        _token = result.GetProperty("token").GetString() ?? "";
+        _username = result.TryGetProperty("username", out var userProperty) ? userProperty.GetString() ?? user : user;
+        _role = result.TryGetProperty("role", out var roleProperty) ? roleProperty.GetString() ?? "Estandar" : "Estandar";
+
+        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _token);
+
+        try
+        {
+            await SecureStorage.Default.SetAsync("server_ip", _serverIp);
+            await SecureStorage.Default.SetAsync("auth_token", _token);
+            await SecureStorage.Default.SetAsync("auth_user", _username);
+            await SecureStorage.Default.SetAsync("auth_role", _role);
+
+            if (ChkRememberPassword.IsChecked)
+                await SecureStorage.Default.SetAsync("auth_password", password);
+            else
+                SecureStorage.Default.Remove("auth_password");
+        }
+        catch (Exception ex)
+        {
+            ShowLoginError($"Sesión iniciada, pero no se pudo guardar la credencial: {ex.Message}");
+        }
+
+        await TryConnectAsync();
     }
 
     private async Task TryConnectAsync()
@@ -232,6 +279,7 @@ public partial class MainPage : ContentPage
         SecureStorage.Default.Remove("server_ip");
         SecureStorage.Default.Remove("auth_user");
         SecureStorage.Default.Remove("auth_role");
+        SecureStorage.Default.Remove("auth_password");
         
         _token = string.Empty;
         _username = string.Empty;

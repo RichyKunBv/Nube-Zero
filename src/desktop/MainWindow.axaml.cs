@@ -17,10 +17,15 @@ namespace NubeZero.Desktop;
 
 public partial class MainWindow : Window
 {
-    private HttpClient _httpClient = new HttpClient { BaseAddress = new Uri("http://localhost:8080") };
+    private HttpClient _httpClient = new HttpClient
+    {
+        BaseAddress = new Uri("http://localhost:8080"),
+        Timeout = TimeSpan.FromHours(2)
+    };
     private string _token = string.Empty;
     private string _username = string.Empty;
     private string _role = "Estandar";
+    private bool _hasSavedMacCredentials;
 
     public MainWindow()
     {
@@ -29,6 +34,27 @@ public partial class MainWindow : Window
         // Agregar recursos de conversores dinámicamente
         Resources.Add("BoolToIconConverter", new BoolToIconConverter());
         Resources.Add("BytesToSizeConverter", new BytesToSizeConverter());
+
+        ChkRememberPassword.IsVisible = OperatingSystem.IsMacOS();
+        if (OperatingSystem.IsMacOS())
+        {
+            try
+            {
+                var savedCredentials = MacOsCredentialStore.Load();
+                if (savedCredentials != null)
+                {
+                    _hasSavedMacCredentials = true;
+                    TxtServerUrl.Text = savedCredentials.ServerUrl;
+                    TxtUser.Text = savedCredentials.Username;
+                    TxtPassword.Text = savedCredentials.Password;
+                    ChkRememberPassword.IsChecked = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowLoginError($"No se pudo acceder al llavero de macOS: {ex.Message}");
+            }
+        }
         
         // Evento Global de Drag & Drop
         AddHandler(DragDrop.DropEvent, OnDrop);
@@ -107,7 +133,11 @@ public partial class MainWindow : Window
             if (!serverUrl.StartsWith("http://") && !serverUrl.StartsWith("https://"))
                 serverUrl = "http://" + serverUrl;
                 
-            _httpClient = new HttpClient { BaseAddress = new Uri(serverUrl) };
+            _httpClient = new HttpClient
+            {
+                BaseAddress = new Uri(serverUrl),
+                Timeout = TimeSpan.FromHours(2)
+            };
             
             var loginData = new { Username = user, Password = pass };
             var content = new StringContent(JsonSerializer.Serialize(loginData), Encoding.UTF8, "application/json");
@@ -120,6 +150,27 @@ public partial class MainWindow : Window
                 _token = result.GetProperty("token").GetString() ?? "";
                 _username = result.TryGetProperty("username", out var uProp) ? uProp.GetString() ?? user : user;
                 _role = result.TryGetProperty("role", out var rProp) ? rProp.GetString() ?? "Estandar" : "Estandar";
+
+                if (OperatingSystem.IsMacOS())
+                {
+                    try
+                    {
+                        if (ChkRememberPassword.IsChecked == true)
+                        {
+                            MacOsCredentialStore.Save(serverUrl, _username, pass);
+                            _hasSavedMacCredentials = true;
+                        }
+                        else if (_hasSavedMacCredentials)
+                        {
+                            MacOsCredentialStore.Delete();
+                            _hasSavedMacCredentials = false;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        ShowLoginError($"Sesión iniciada, pero no se pudo guardar en el llavero: {ex.Message}");
+                    }
+                }
                 
                 _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _token);
                 

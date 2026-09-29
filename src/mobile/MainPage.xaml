@@ -85,6 +85,10 @@
 
                     <Entry x:Name="TxtUser" Placeholder="Usuario" BackgroundColor="#10FFFFFF" TextColor="White" PlaceholderColor="#80FFFFFF" ReturnType="Next" Completed="TxtUser_Completed" />
                     <Entry x:Name="TxtPassword" Placeholder="Contraseña" IsPassword="True" BackgroundColor="#10FFFFFF" TextColor="White" PlaceholderColor="#80FFFFFF" ReturnType="Done" Completed="BtnLogin_Clicked" />
+                    <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                        <CheckBox x:Name="ChkRememberPassword" Color="#00D2FF" />
+                        <Label Text="Recordar contraseña" TextColor="White" VerticalTextAlignment="Center" />
+                    </HorizontalStackLayout>
                     
                     <Label x:Name="TxtLoginError" TextColor="#FF5555" HorizontalOptions="Center" IsVisible="False"/>
                     

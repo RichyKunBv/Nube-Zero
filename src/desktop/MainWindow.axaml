@@ -130,6 +130,7 @@
 
                     <TextBox Name="TxtUser" PlaceholderText="Usuario" Background="#10FFFFFF" Foreground="White" CornerRadius="8" Padding="10"/>
                     <TextBox Name="TxtPassword" PlaceholderText="Contraseña" PasswordChar="•" Background="#10FFFFFF" Foreground="White" CornerRadius="8" Padding="10"/>
+                    <CheckBox Name="ChkRememberPassword" Content="Recordar contraseña en el llavero de macOS" IsVisible="False" Foreground="White"/>
                     
                     <TextBlock Name="TxtLoginError" Foreground="#FF5555" HorizontalAlignment="Center" IsVisible="False" TextWrapping="Wrap"/>
                     

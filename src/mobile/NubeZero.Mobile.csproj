@@ -14,12 +14,12 @@
 		<Nullable>enable</Nullable>
         <VersionFileContent>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)..\shared\Version.cs'))</VersionFileContent>
         <Version>$([System.Text.RegularExpressions.Regex]::Match($(VersionFileContent), '(?&lt;= &quot;[vV]?)[0-9\.]+').Value)</Version>
-
 		<MauiXamlInflator>SourceGen</MauiXamlInflator>
 		<ApplicationTitle>NubeZero</ApplicationTitle>
 		<ApplicationId>com.companyname.nubezero.mobile</ApplicationId>
 		<ApplicationDisplayVersion>$(Version)</ApplicationDisplayVersion>
-		<ApplicationVersion>1</ApplicationVersion>
+		<!-- Increment this integer for every Android release; keep ApplicationId unchanged. -->
+		<ApplicationVersion>7000</ApplicationVersion>
 
 		<SupportedOSPlatformVersion>21.0</SupportedOSPlatformVersion>
 	</PropertyGroup>
