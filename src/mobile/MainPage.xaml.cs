@@ -1,7 +1,10 @@
 using System.Linq;
+using System.Collections.Concurrent;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using NubeZero.Shared;
 
 namespace NubeZero.Mobile;
@@ -13,6 +16,11 @@ public partial class MainPage : ContentPage
     private string _serverIp = string.Empty;
     private string _username = string.Empty;
     private string _role = "Estandar";
+    private string _currentPath = string.Empty;
+    private string _transferMessage = string.Empty;
+    private long _lastProgressUpdate;
+    private readonly ConcurrentDictionary<string, byte> _thumbnailRequests = new ConcurrentDictionary<string, byte>();
+    private readonly SemaphoreSlim _thumbnailSlots = new SemaphoreSlim(2, 2);
     private List<DiscoveryResponse> _discoveredServers = new List<DiscoveryResponse>();
 
     public MainPage()
@@ -20,6 +28,7 @@ public partial class MainPage : ContentPage
         InitializeComponent();
         
         Resources.Add("BoolToIconConverter", new BoolToIconConverter());
+        Resources.Add("FileIconConverter", new FileIconConverter());
         Resources.Add("BytesToSizeConverter", new BytesToSizeConverter());
 
         _ = CheckExistingSessionAsync();
@@ -273,6 +282,7 @@ public partial class MainPage : ContentPage
 
     private async Task TryConnectAsync()
     {
+        _currentPath = string.Empty;
         TxtUserInfo.Text = $"👤 {_username} [{_role}]";
         BtnUsersAdmin.IsVisible = (_role == "Admin");
         BtnUploadFab.IsVisible = (_role != "Visitante");
@@ -303,7 +313,7 @@ public partial class MainPage : ContentPage
         try
         {
             TxtStatus.Text = "Sincronizando...";
-            var response = await _httpClient.GetAsync("/api/files?path=");
+            var response = await _httpClient.GetAsync($"/api/files?path={Uri.EscapeDataString(_currentPath)}");
             
             if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
@@ -321,6 +331,8 @@ public partial class MainPage : ContentPage
             var files = JsonSerializer.Deserialize<List<ArchivoDTO>>(json, options);
             
             LstFiles.ItemsSource = files;
+            TxtCurrentPath.Text = string.IsNullOrEmpty(_currentPath) ? "/" : "/" + _currentPath;
+            BtnParentFolder.IsVisible = !string.IsNullOrEmpty(_currentPath);
             TxtStatus.Text = $"{files?.Count ?? 0} elementos";
         }
         catch (Exception ex)
@@ -330,6 +342,141 @@ public partial class MainPage : ContentPage
         finally
         {
             RefreshView.IsRefreshing = false;
+        }
+    }
+
+    private async void LstFiles_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (e.CurrentSelection.FirstOrDefault() is ArchivoDTO { EsCarpeta: true } folder)
+        {
+            LstFiles.SelectedItem = null;
+            _currentPath = string.IsNullOrEmpty(_currentPath) ? folder.Nombre : $"{_currentPath}/{folder.Nombre}";
+            await LoadFilesAsync();
+        }
+    }
+
+    private async void BtnParentFolder_Clicked(object sender, EventArgs e)
+    {
+        int separator = _currentPath.LastIndexOf('/');
+        _currentPath = separator < 0 ? string.Empty : _currentPath.Substring(0, separator);
+        await LoadFilesAsync();
+    }
+
+    private string GetRemotePath(string name)
+    {
+        string path = string.IsNullOrEmpty(_currentPath) ? name : $"{_currentPath}/{name}";
+        return "/" + path;
+    }
+
+    private void FileItem_Loaded(object sender, EventArgs e)
+    {
+        if (sender is Element element && element.BindingContext is ArchivoDTO file)
+        {
+            _ = LoadThumbnailAsync(file);
+        }
+    }
+
+    private async Task LoadThumbnailAsync(ArchivoDTO file)
+    {
+        if (file.ThumbnailSource != null) return;
+        string extension = Path.GetExtension(file.Nombre).ToLowerInvariant();
+        bool isImage = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp" }.Contains(extension);
+        bool isVideo = new[] { ".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".3gp", ".wmv", ".mpeg", ".mpg" }.Contains(extension);
+        long maxSourceBytes = isVideo ? 32 * 1024 * 1024 : 20 * 1024 * 1024;
+        if (file.EsCarpeta || file.PesoBytes > maxSourceBytes || (!isImage && !isVideo)) return;
+
+        string cacheDirectory = Path.Combine(FileSystem.CacheDirectory, "thumbnails");
+        Directory.CreateDirectory(cacheDirectory);
+        string cacheKey = $"{_serverIp}|{_currentPath}|{file.Nombre}|{file.PesoBytes}|{file.FechaModificacion.Ticks}";
+        string cacheName = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(cacheKey))) + ".png";
+        string thumbnailPath = Path.Combine(cacheDirectory, cacheName);
+        if (File.Exists(thumbnailPath))
+        {
+            MainThread.BeginInvokeOnMainThread(() => file.ThumbnailSource = ImageSource.FromFile(thumbnailPath));
+            return;
+        }
+        if (!_thumbnailRequests.TryAdd(thumbnailPath, 0)) return;
+
+        string sourcePath = thumbnailPath + ".source";
+        bool hasThumbnailSlot = false;
+        try
+        {
+            await _thumbnailSlots.WaitAsync().ConfigureAwait(false);
+            hasThumbnailSlot = true;
+            string remotePath = Uri.EscapeDataString(GetRemotePath(file.Nombre));
+            using var response = await _httpClient.GetAsync($"/api/download?path={remotePath}", HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            if (response.Content.Headers.ContentLength > maxSourceBytes) return;
+
+            using var input = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+            using (var output = new FileStream(sourcePath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
+            {
+                var buffer = new byte[81920];
+                long downloaded = 0;
+                int count;
+                while ((count = await input.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false)) > 0)
+                {
+                    downloaded += count;
+                    if (downloaded > maxSourceBytes) return;
+                    await output.WriteAsync(buffer, 0, count).ConfigureAwait(false);
+                }
+            }
+
+            bool created = await Task.Run(() =>
+            {
+                if (isVideo)
+                {
+                    using var retriever = new Android.Media.MediaMetadataRetriever();
+                    retriever.SetDataSource(sourcePath);
+                    using var frame = retriever.GetFrameAtTime(0, Android.Media.Option.ClosestSync);
+                    if (frame == null) return false;
+
+                    double scale = Math.Min(1d, Math.Min(112d / frame.Width, 112d / frame.Height));
+                    int width = Math.Max(1, (int)(frame.Width * scale));
+                    int height = Math.Max(1, (int)(frame.Height * scale));
+                    using var thumbnail = Android.Graphics.Bitmap.CreateScaledBitmap(frame, width, height, true);
+                    using var videoOutput = new FileStream(thumbnailPath, FileMode.Create, FileAccess.Write, FileShare.None);
+                    thumbnail.Compress(Android.Graphics.Bitmap.CompressFormat.Png!, 100, videoOutput);
+                    return true;
+                }
+
+                var bounds = new Android.Graphics.BitmapFactory.Options { InJustDecodeBounds = true };
+                Android.Graphics.BitmapFactory.DecodeFile(sourcePath, bounds);
+                int sampleSize = 1;
+                while (bounds.OutWidth / sampleSize > 112 || bounds.OutHeight / sampleSize > 112)
+                {
+                    sampleSize *= 2;
+                }
+
+                var options = new Android.Graphics.BitmapFactory.Options { InSampleSize = sampleSize };
+                using var bitmap = Android.Graphics.BitmapFactory.DecodeFile(sourcePath, options);
+                if (bitmap == null) return false;
+
+                using var imageOutput = new FileStream(thumbnailPath, FileMode.Create, FileAccess.Write, FileShare.None);
+                bitmap.Compress(Android.Graphics.Bitmap.CompressFormat.Png!, 100, imageOutput);
+                return true;
+            }).ConfigureAwait(false);
+            if (!created) return;
+
+            TrimThumbnailCache(cacheDirectory);
+            MainThread.BeginInvokeOnMainThread(() => file.ThumbnailSource = ImageSource.FromFile(thumbnailPath));
+        }
+        catch
+        {
+        }
+        finally
+        {
+            _thumbnailRequests.TryRemove(thumbnailPath, out _);
+            if (File.Exists(sourcePath)) File.Delete(sourcePath);
+            if (hasThumbnailSlot) _thumbnailSlots.Release();
+        }
+    }
+
+    private static void TrimThumbnailCache(string cacheDirectory)
+    {
+        foreach (var file in new DirectoryInfo(cacheDirectory).GetFiles("*.png").OrderByDescending(file => file.LastWriteTimeUtc).Skip(80))
+        {
+            try { file.Delete(); } catch { }
         }
     }
 
@@ -354,6 +501,7 @@ public partial class MainPage : ContentPage
         _token = string.Empty;
         _username = string.Empty;
         _role = "Estandar";
+        _currentPath = string.Empty;
         
         if (_httpClient != null) 
         {
@@ -548,13 +696,13 @@ public partial class MainPage : ContentPage
     {
         try
         {
-            TxtStatus.Text = $"Subiendo {fileName}...";
+            ShowTransfer($"Subiendo {fileName}...");
             
             using var fs = new FileStream(localPath, FileMode.Open, FileAccess.Read);
-            var content = new StreamContent(fs);
+            using var content = new ProgressStreamContent(fs, UpdateTransferProgress);
             
-            string relativePath = $"/{Uri.EscapeDataString(fileName)}";
-            var response = await _httpClient.PostAsync($"/api/upload?path={relativePath}", content);
+            string relativePath = Uri.EscapeDataString(GetRemotePath(fileName));
+            using var response = await _httpClient.PostAsync($"/api/upload?path={relativePath}", content);
             response.EnsureSuccessStatusCode();
             
             TxtStatus.Text = "Subida exitosa";
@@ -563,6 +711,10 @@ public partial class MainPage : ContentPage
         catch (Exception ex)
         {
             TxtStatus.Text = $"Error al subir: {ex.Message}";
+        }
+        finally
+        {
+            HideTransfer();
         }
     }
 
@@ -582,35 +734,45 @@ public partial class MainPage : ContentPage
 
             if (action == "Descargar")
             {
+                Android.Net.Uri? destination = null;
+                MainActivity? activity = null;
                 try
                 {
                     string safeFileName = Path.GetFileName(dto.Nombre);
                     if (string.IsNullOrWhiteSpace(safeFileName)) safeFileName = "archivo_descargado";
-                    var activity = Microsoft.Maui.ApplicationModel.Platform.CurrentActivity as MainActivity
+                    activity = Microsoft.Maui.ApplicationModel.Platform.CurrentActivity as MainActivity
                         ?? throw new InvalidOperationException("No se pudo abrir el selector de destino Android.");
 
                     TxtStatus.Text = "Selecciona dónde guardar el archivo...";
-                    var destination = await activity.PickSaveDestinationAsync(safeFileName);
+                    destination = await activity.PickSaveDestinationAsync(safeFileName);
                     if (destination == null)
                     {
                         TxtStatus.Text = "Guardado cancelado";
                         return;
                     }
 
-                    TxtStatus.Text = $"Descargando {safeFileName}...";
-                    string relativePath = $"/{Uri.EscapeDataString(dto.Nombre)}";
+                    ShowTransfer($"Descargando {safeFileName}...");
+                    string relativePath = Uri.EscapeDataString(GetRemotePath(dto.Nombre));
                     using var response = await _httpClient.GetAsync($"/api/download?path={relativePath}", HttpCompletionOption.ResponseHeadersRead);
                     response.EnsureSuccessStatusCode();
 
                     using var stream = await response.Content.ReadAsStreamAsync();
-                    TxtStatus.Text = "Guardando en la ubicación seleccionada...";
-                    await activity.CopyToSaveDestinationAsync(destination, stream);
+                    long total = response.Content.Headers.ContentLength ?? -1;
+                    await activity.CopyToSaveDestinationAsync(destination, stream, total, UpdateTransferProgress);
                     TxtStatus.Text = "Archivo guardado correctamente";
                 }
                 catch (Exception ex)
                 {
+                    if (destination != null && activity != null)
+                    {
+                        try { Android.Provider.DocumentsContract.DeleteDocument(activity.ContentResolver!, destination); } catch { }
+                    }
                     await DisplayAlert("Error", $"No se pudo descargar: {ex.Message}", "OK");
                     TxtStatus.Text = "Error al descargar";
+                }
+                finally
+                {
+                    HideTransfer();
                 }
             }
             else if (action == "Eliminar")
@@ -626,7 +788,7 @@ public partial class MainPage : ContentPage
                 {
                     try
                     {
-                        string relativePath = $"/{Uri.EscapeDataString(dto.Nombre)}";
+                        string relativePath = Uri.EscapeDataString(GetRemotePath(dto.Nombre));
                         var response = await _httpClient.DeleteAsync($"/api/delete?path={relativePath}");
                         response.EnsureSuccessStatusCode();
                         await LoadFilesAsync();
@@ -643,6 +805,46 @@ public partial class MainPage : ContentPage
             }
         }
     }
+
+    private void ShowTransfer(string message)
+    {
+        Interlocked.Exchange(ref _lastProgressUpdate, 0);
+        _transferMessage = message;
+        TxtTransferStatus.Text = message;
+        PrgTransfer.Progress = 0;
+        TransferPanel.IsVisible = true;
+    }
+
+    private void UpdateTransferProgress(long transferred, long total)
+    {
+        long now = Environment.TickCount64;
+        if (total > transferred && now - Interlocked.Read(ref _lastProgressUpdate) < 150) return;
+        Interlocked.Exchange(ref _lastProgressUpdate, now);
+
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            if (total > 0)
+            {
+                PrgTransfer.Progress = Math.Min(1, (double)transferred / total);
+                    if (transferred >= total)
+                    {
+                        string nextStep = _transferMessage.StartsWith("Subiendo", StringComparison.Ordinal)
+                            ? "esperando confirmación del servidor"
+                            : "verificando descarga";
+                        TxtTransferStatus.Text = $"{_transferMessage} • {nextStep}";
+                    }
+                    else
+                    {
+                        TxtTransferStatus.Text = $"{_transferMessage} • {transferred / 1048576d:0.#} / {total / 1048576d:0.#} MB";
+                    }
+            }
+        });
+    }
+
+    private void HideTransfer()
+    {
+        MainThread.BeginInvokeOnMainThread(() => TransferPanel.IsVisible = false);
+    }
 }
 
 // Conversores UI
@@ -653,6 +855,25 @@ public class BoolToIconConverter : IValueConverter
         if (value is bool isFolder) return isFolder ? "📁" : "📄";
         return "❓";
     }
+    public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture) => throw new NotImplementedException();
+}
+
+public class FileIconConverter : IValueConverter
+{
+    public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+    {
+        if (value is not ArchivoDTO file) return "📄";
+        if (file.EsCarpeta) return "📁";
+
+        string extension = Path.GetExtension(file.Nombre).ToLowerInvariant();
+        if (new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp" }.Contains(extension)) return "🖼️";
+        if (new[] { ".mp4", ".mov", ".mkv", ".avi", ".webm" }.Contains(extension)) return "🎬";
+        if (extension == ".apk") return "📱";
+        if (new[] { ".zip", ".rar", ".7z", ".tar", ".gz" }.Contains(extension)) return "🗜️";
+        if (new[] { ".pdf", ".doc", ".docx", ".txt", ".odt" }.Contains(extension)) return "📃";
+        return "📄";
+    }
+
     public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture) => throw new NotImplementedException();
 }
 

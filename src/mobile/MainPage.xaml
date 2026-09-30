@@ -17,7 +17,7 @@
         </BoxView>
 
         <!-- VISTA PRINCIPAL (Archivos) -->
-        <Grid x:Name="MainView" IsVisible="False" RowDefinitions="Auto, *">
+        <Grid x:Name="MainView" IsVisible="False" RowDefinitions="Auto, Auto, *, Auto">
             <!-- HEADER -->
             <Frame Grid.Row="0" Margin="15,40,15,10" BackgroundColor="#20FFFFFF" CornerRadius="12" BorderColor="Transparent" Padding="15">
                 <Grid ColumnDefinitions="*, Auto, Auto, Auto, Auto, Auto">
@@ -34,14 +34,22 @@
                 </Grid>
             </Frame>
 
+            <Grid Grid.Row="1" Margin="15,0,15,8" ColumnDefinitions="Auto, *">
+                <Button x:Name="BtnParentFolder" Text="↑" Clicked="BtnParentFolder_Clicked" IsVisible="False" BackgroundColor="#30FFFFFF" TextColor="White" WidthRequest="38" HeightRequest="36" Padding="0"/>
+                <Label x:Name="TxtCurrentPath" Grid.Column="1" Text="/" TextColor="#00D2FF" VerticalTextAlignment="Center" Margin="8,0"/>
+            </Grid>
+
             <!-- LISTA DE ARCHIVOS -->
-            <RefreshView Grid.Row="1" x:Name="RefreshView" Refreshing="RefreshView_Refreshing">
-                <CollectionView x:Name="LstFiles" Margin="15,0">
+            <RefreshView Grid.Row="2" x:Name="RefreshView" Refreshing="RefreshView_Refreshing">
+                <CollectionView x:Name="LstFiles" Margin="15,0" SelectionMode="Single" SelectionChanged="LstFiles_SelectionChanged">
                     <CollectionView.ItemTemplate>
                         <DataTemplate x:DataType="shared:ArchivoDTO">
-                            <Frame Margin="0,5" Padding="10" BackgroundColor="#10FFFFFF" BorderColor="#20FFFFFF" CornerRadius="10">
+                            <Frame Margin="0,5" Padding="10" BackgroundColor="#10FFFFFF" BorderColor="#20FFFFFF" CornerRadius="10" Loaded="FileItem_Loaded" BindingContextChanged="FileItem_Loaded">
                                 <Grid ColumnDefinitions="Auto, *, Auto">
-                                    <Label Grid.Column="0" Text="{Binding EsCarpeta, Converter={StaticResource BoolToIconConverter}}" FontSize="24" VerticalOptions="Center" Margin="0,0,15,0"/>
+                                    <Grid Grid.Column="0" WidthRequest="48" HeightRequest="48" Margin="0,0,12,0">
+                                        <Image Source="{Binding ThumbnailSource}" Aspect="AspectFill"/>
+                                        <Label Text="{Binding Icono}" FontSize="24" HorizontalOptions="Center" VerticalOptions="Center"/>
+                                    </Grid>
                                     
                                     <VerticalStackLayout Grid.Column="1" VerticalOptions="Center">
                                         <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="16" TextColor="White"/>
@@ -62,11 +70,18 @@
             </RefreshView>
 
             <!-- FAB (Botón flotante) -->
-            <Button x:Name="BtnUploadFab" Grid.Row="1" Text="+" BackgroundColor="#00D2FF" TextColor="White" FontSize="28" FontAttributes="Bold"
+            <Button x:Name="BtnUploadFab" Grid.Row="2" Text="+" BackgroundColor="#00D2FF" TextColor="White" FontSize="28" FontAttributes="Bold"
                     WidthRequest="60" HeightRequest="60" CornerRadius="30"
                     HorizontalOptions="End" VerticalOptions="End" Margin="20,20,20,30"
                     Shadow="{Shadow Brush=Black, Offset='0,4', Radius=10, Opacity=0.4}"
                     Clicked="BtnUpload_Clicked"/>
+
+            <Border x:Name="TransferPanel" Grid.Row="3" Margin="15,0,15,12" Padding="10,6" Stroke="#20FFFFFF" StrokeThickness="1" BackgroundColor="#18FFFFFF" IsVisible="False">
+                <VerticalStackLayout Spacing="4">
+                    <Label x:Name="TxtTransferStatus" TextColor="White" FontSize="12"/>
+                    <ProgressBar x:Name="PrgTransfer" Progress="0" HeightRequest="6"/>
+                </VerticalStackLayout>
+            </Border>
         </Grid>
 
         <!-- VISTA DE LOGIN -->

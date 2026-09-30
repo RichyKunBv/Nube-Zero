@@ -17,6 +17,7 @@ namespace NubeZero.Server
         private static AuthController _authController;
         private static AuthInterceptor _authInterceptor;
         private static DiscoveryService _discoveryService;
+        private static UploadQueueService _uploadQueueService;
 
         static async Task Main(string[] args)
         {
@@ -56,7 +57,8 @@ namespace NubeZero.Server
             _dbContext = new DatabaseContext(storagePath);
             _authController = new AuthController(_dbContext);
             _authInterceptor = new AuthInterceptor(_dbContext);
-            _fileController = new FileController(_storageService, _dbContext);
+            _uploadQueueService = new UploadQueueService();
+            _fileController = new FileController(_storageService, _dbContext, _uploadQueueService);
             _discoveryService = new DiscoveryService(port, serverName, discoveryPort, discoveryKey);
             _discoveryService.Start();
             
@@ -187,7 +189,7 @@ namespace NubeZero.Server
                         await _authInterceptor.WriteForbiddenAsync(response, "Los visitantes solo tienen permisos de descarga.");
                         return;
                     }
-                    await _fileController.HandleUploadAsync(context, reqPath, session.Username);
+                    await _fileController.HandleUploadAsync(context, reqPath, session.Username, session.Token);
                 }
                 else if (request.Url.AbsolutePath == "/api/delete" && request.HttpMethod == "DELETE")
                 {

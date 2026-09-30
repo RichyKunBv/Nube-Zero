@@ -76,13 +76,18 @@
 
             <!-- ZONA DRAG & DROP Y LISTADO -->
             <Border Grid.Row="1" Margin="20,10" Background="#10FFFFFF" CornerRadius="12" BorderBrush="#20FFFFFF" BorderThickness="1">
-                <Grid>
-                    <TextBlock Name="TxtDragHint" Text="Arrastra tus archivos aquí" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="20" Foreground="#40FFFFFF" FontWeight="Bold" IsVisible="True"/>
-                    <ListBox Name="LstFiles" Background="Transparent" BorderThickness="0" Margin="5">
+                <Grid RowDefinitions="Auto, *">
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" Margin="12,8">
+                        <Button Name="BtnParentFolder" Content="↑" ToolTip.Tip="Carpeta anterior" Click="BtnParentFolder_Click" IsVisible="False"/>
+                        <TextBlock Name="TxtCurrentPath" Text="/" VerticalAlignment="Center" Foreground="#00D2FF"/>
+                    </StackPanel>
+                    <TextBlock Grid.Row="1" Name="TxtDragHint" Text="Arrastra tus archivos aquí" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="20" Foreground="#40FFFFFF" FontWeight="Bold" IsVisible="True"/>
+                    <ListBox Grid.Row="1" Name="LstFiles" Background="Transparent" BorderThickness="0" Margin="5" DoubleTapped="LstFiles_DoubleTapped">
                         <ListBox.ItemTemplate>
                             <DataTemplate DataType="shared:ArchivoDTO">
-                                <Grid ColumnDefinitions="Auto, *, Auto" Margin="5">
-                                    <TextBlock Grid.Column="0" Text="{Binding EsCarpeta, Converter={StaticResource BoolToIconConverter}}" FontSize="24" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                                <Grid ColumnDefinitions="48, *, Auto" Margin="5" AttachedToVisualTree="FileRow_AttachedToVisualTree">
+                                    <Image Grid.Column="0" Source="{Binding ThumbnailSource}" Width="42" Height="42" Stretch="UniformToFill" Margin="0,0,6,0"/>
+                                    <TextBlock Grid.Column="0" Text="{Binding Icono}" FontSize="24" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                                     
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                         <TextBlock Text="{Binding Nombre}" FontWeight="SemiBold" FontSize="16" Foreground="White"/>
@@ -112,6 +117,13 @@
 
             <!-- BOTÓN FLOTANTE (FAB) -->
             <Button Name="BtnUploadFab" Grid.Row="1" Classes="Fab" Content="+" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,30,30" Click="BtnUploadManual_Click"/>
+
+            <Border Name="TransferPanel" Grid.Row="2" Margin="20,0,20,16" Padding="10,6" Background="#18FFFFFF" CornerRadius="8" IsVisible="False">
+                <StackPanel Spacing="5">
+                    <TextBlock Name="TxtTransferStatus" Foreground="White" FontSize="12"/>
+                    <ProgressBar Name="PrgTransfer" Minimum="0" Maximum="100" Height="6"/>
+                </StackPanel>
+            </Border>
         </Grid>
 
         <!-- PANTALLA DE LOGIN OVERLAY -->

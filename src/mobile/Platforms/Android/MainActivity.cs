@@ -53,12 +53,32 @@ public class MainActivity : MauiAppCompatActivity
         return completion.Task;
     }
 
-    public async Task CopyToSaveDestinationAsync(Android.Net.Uri destination, System.IO.Stream source)
+    public async Task CopyToSaveDestinationAsync(Android.Net.Uri destination, System.IO.Stream source, long total, Action<long, long> progress)
     {
-        using var output = ContentResolver?.OpenOutputStream(destination, "w")
-            ?? throw new InvalidOperationException("Android no pudo abrir el destino seleccionado.");
-        await source.CopyToAsync(output, 81920);
-        await output.FlushAsync();
+        try
+        {
+            using var output = ContentResolver?.OpenOutputStream(destination, "w")
+                ?? throw new InvalidOperationException("Android no pudo abrir el destino seleccionado.");
+            long transferred = 0;
+            var buffer = new byte[81920];
+            int count;
+            while ((count = await source.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false)) > 0)
+            {
+                await output.WriteAsync(buffer, 0, count).ConfigureAwait(false);
+                transferred += count;
+                progress?.Invoke(transferred, total);
+            }
+
+            if (total >= 0 && transferred != total)
+                throw new IOException("La descarga llegó incompleta.");
+
+            await output.FlushAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            try { Android.Provider.DocumentsContract.DeleteDocument(ContentResolver!, destination); } catch { }
+            throw;
+        }
     }
 
     protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)

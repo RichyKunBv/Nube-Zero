@@ -1,17 +1,24 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Security.Cryptography;
+using System.Threading;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Data.Converters;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using NubeZero.Shared;
 
 namespace NubeZero.Desktop;
@@ -26,6 +33,11 @@ public partial class MainWindow : Window
     private string _token = string.Empty;
     private string _username = string.Empty;
     private string _role = "Estandar";
+    private string _currentPath = string.Empty;
+    private string _transferMessage = string.Empty;
+    private long _lastProgressUpdate;
+    private readonly ConcurrentDictionary<string, bool> _thumbnailRequests = new ConcurrentDictionary<string, bool>();
+    private readonly SemaphoreSlim _thumbnailSlots = new SemaphoreSlim(2, 2);
     private bool _hasSavedMacCredentials;
 
     public MainWindow()
@@ -174,6 +186,7 @@ public partial class MainWindow : Window
                 }
                 
                 _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _token);
+                _currentPath = string.Empty;
                 
                 // Actualizar interfaz según el rol
                 TxtUserInfo.Text = $"👤 {_username} [{_role}]";
@@ -267,7 +280,7 @@ public partial class MainWindow : Window
         try
         {
             TxtStatus.Text = "Sincronizando...";
-            var response = await _httpClient.GetAsync("/api/files?path=");
+            var response = await _httpClient.GetAsync($"/api/files?path={Uri.EscapeDataString(_currentPath)}");
             if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
                 MainView.IsVisible = false;
@@ -282,12 +295,161 @@ public partial class MainWindow : Window
             var files = JsonSerializer.Deserialize<List<ArchivoDTO>>(json, options);
             
             LstFiles.ItemsSource = files;
+            TxtCurrentPath.Text = string.IsNullOrEmpty(_currentPath) ? "/" : "/" + _currentPath;
+            BtnParentFolder.IsVisible = !string.IsNullOrEmpty(_currentPath);
             TxtStatus.Text = $"{files?.Count ?? 0} elementos";
             TxtDragHint.IsVisible = (files == null || files.Count == 0);
         }
         catch (Exception ex)
         {
             TxtStatus.Text = $"Error: {ex.Message}";
+        }
+    }
+
+    private async void LstFiles_DoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (LstFiles.SelectedItem is ArchivoDTO { EsCarpeta: true } folder)
+        {
+            _currentPath = string.IsNullOrEmpty(_currentPath) ? folder.Nombre : $"{_currentPath}/{folder.Nombre}";
+            await LoadFilesAsync();
+        }
+    }
+
+    private async void BtnParentFolder_Click(object? sender, RoutedEventArgs e)
+    {
+        int separator = _currentPath.LastIndexOf('/');
+        _currentPath = separator < 0 ? string.Empty : _currentPath.Substring(0, separator);
+        await LoadFilesAsync();
+    }
+
+    private string GetRemotePath(string name)
+    {
+        string path = string.IsNullOrEmpty(_currentPath) ? name : $"{_currentPath}/{name}";
+        return "/" + path;
+    }
+
+    private void FileRow_AttachedToVisualTree(object? sender, VisualTreeAttachmentEventArgs e)
+    {
+        if (sender is Control control && control.DataContext is ArchivoDTO file)
+        {
+            _ = LoadThumbnailAsync(file);
+        }
+    }
+
+    private async System.Threading.Tasks.Task LoadThumbnailAsync(ArchivoDTO file)
+    {
+        if (file.ThumbnailSource != null) return;
+        string extension = Path.GetExtension(file.Nombre).ToLowerInvariant();
+        bool isImage = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp" }.Contains(extension);
+        bool isVideo = new[] { ".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".3gp", ".wmv", ".mpeg", ".mpg" }.Contains(extension);
+        long maxSourceBytes = isVideo ? 32 * 1024 * 1024 : 20 * 1024 * 1024;
+        if (file.EsCarpeta || file.PesoBytes > maxSourceBytes || (!isImage && !isVideo)) return;
+
+        string cacheDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NubeZero", "thumbnails");
+        Directory.CreateDirectory(cacheDirectory);
+        string cacheKey = $"{_httpClient.BaseAddress}|{_currentPath}|{file.Nombre}|{file.PesoBytes}|{file.FechaModificacion.Ticks}";
+        string cachePath = Path.Combine(cacheDirectory, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(cacheKey))) + ".png");
+        if (File.Exists(cachePath))
+        {
+            var cachedBitmap = await System.Threading.Tasks.Task.Run(() => new Bitmap(cachePath)).ConfigureAwait(false);
+            Dispatcher.UIThread.Post(() => file.ThumbnailSource = cachedBitmap);
+            return;
+        }
+        if (!_thumbnailRequests.TryAdd(cachePath, true)) return;
+
+        string sourcePath = cachePath + ".source";
+        bool hasThumbnailSlot = false;
+        try
+        {
+            await _thumbnailSlots.WaitAsync().ConfigureAwait(false);
+            hasThumbnailSlot = true;
+            string remotePath = Uri.EscapeDataString(GetRemotePath(file.Nombre));
+            using var response = await _httpClient.GetAsync($"/api/download?path={remotePath}", HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            if (response.Content.Headers.ContentLength > maxSourceBytes) return;
+
+            using var input = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+            using (var output = new FileStream(sourcePath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
+            {
+                var buffer = new byte[81920];
+                long downloaded = 0;
+                int count;
+                while ((count = await input.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false)) > 0)
+                {
+                    downloaded += count;
+                    if (downloaded > maxSourceBytes) return;
+                    await output.WriteAsync(buffer, 0, count).ConfigureAwait(false);
+                }
+            }
+
+            if (isVideo)
+            {
+                if (!await TryCreateVideoThumbnailAsync(sourcePath, cachePath).ConfigureAwait(false)) return;
+            }
+            else
+            {
+                using (var source = File.OpenRead(sourcePath))
+                using (var bitmap = Bitmap.DecodeToWidth(source, 112, BitmapInterpolationMode.MediumQuality))
+                {
+                    bitmap.Save(cachePath, new PngBitmapEncoderOptions());
+                }
+            }
+
+            TrimThumbnailCache(cacheDirectory);
+            var thumbnail = await System.Threading.Tasks.Task.Run(() => new Bitmap(cachePath)).ConfigureAwait(false);
+            Dispatcher.UIThread.Post(() => file.ThumbnailSource = thumbnail);
+        }
+        catch
+        {
+        }
+        finally
+        {
+            _thumbnailRequests.TryRemove(cachePath, out _);
+            if (File.Exists(sourcePath)) File.Delete(sourcePath);
+            if (hasThumbnailSlot) _thumbnailSlots.Release();
+        }
+    }
+
+    private static async System.Threading.Tasks.Task<bool> TryCreateVideoThumbnailAsync(string sourcePath, string thumbnailPath)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "ffmpeg",
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add("-v");
+        startInfo.ArgumentList.Add("quiet");
+        startInfo.ArgumentList.Add("-i");
+        startInfo.ArgumentList.Add(sourcePath);
+        startInfo.ArgumentList.Add("-frames:v");
+        startInfo.ArgumentList.Add("1");
+        startInfo.ArgumentList.Add("-vf");
+        startInfo.ArgumentList.Add("scale=112:-1");
+        startInfo.ArgumentList.Add("-y");
+        startInfo.ArgumentList.Add(thumbnailPath);
+
+        using var process = Process.Start(startInfo);
+        if (process == null) return false;
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+            return process.ExitCode == 0 && File.Exists(thumbnailPath);
+        }
+        catch
+        {
+            try { process.Kill(true); } catch { }
+            return false;
+        }
+    }
+
+    private static void TrimThumbnailCache(string cacheDirectory)
+    {
+        foreach (var file in new DirectoryInfo(cacheDirectory).GetFiles("*.png").OrderByDescending(file => file.LastWriteTimeUtc).Skip(80))
+        {
+            try { file.Delete(); } catch { }
         }
     }
 
@@ -348,19 +510,23 @@ public partial class MainWindow : Window
         try
         {
             string fileName = Path.GetFileName(localPath);
-            TxtStatus.Text = $"Subiendo {fileName}...";
+            ShowTransfer($"Subiendo {fileName}...");
             
             using var fs = new FileStream(localPath, FileMode.Open, FileAccess.Read);
-            var content = new StreamContent(fs);
+            using var content = new ProgressStreamContent(fs, UpdateTransferProgress);
             
-            string relativePath = $"/{Uri.EscapeDataString(fileName)}";
-            var response = await _httpClient.PostAsync($"/api/upload?path={relativePath}", content);
+            string relativePath = Uri.EscapeDataString(GetRemotePath(fileName));
+            using var response = await _httpClient.PostAsync($"/api/upload?path={relativePath}", content);
             response.EnsureSuccessStatusCode();
             TxtStatus.Text = "Subida exitosa";
         }
         catch (Exception ex)
         {
             TxtStatus.Text = $"Error al subir: {ex.Message}";
+        }
+        finally
+        {
+            HideTransfer();
         }
     }
 
@@ -383,21 +549,45 @@ public partial class MainWindow : Window
             if (folder.Count > 0)
             {
                 string destPath = Path.Combine(folder[0].TryGetLocalPath()!, dto.Nombre);
-                TxtStatus.Text = $"Descargando {dto.Nombre}...";
+                string temporaryPath = destPath + ".nubezero-" + Guid.NewGuid().ToString("N") + ".part";
+                ShowTransfer($"Descargando {dto.Nombre}...");
                 
                 try
                 {
-                    string relativePath = $"/{Uri.EscapeDataString(dto.Nombre)}";
-                    var response = await _httpClient.GetAsync($"/api/download?path={relativePath}", HttpCompletionOption.ResponseHeadersRead);
+                    string relativePath = Uri.EscapeDataString(GetRemotePath(dto.Nombre));
+                    using var response = await _httpClient.GetAsync($"/api/download?path={relativePath}", HttpCompletionOption.ResponseHeadersRead);
                     response.EnsureSuccessStatusCode();
                     
-                    using var fs = new FileStream(destPath, FileMode.Create, FileAccess.Write);
-                    await response.Content.CopyToAsync(fs);
+                    long total = response.Content.Headers.ContentLength ?? -1;
+                    long transferred = 0;
+                    using var input = await response.Content.ReadAsStreamAsync();
+                    using (var fs = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true))
+                    {
+                        var buffer = new byte[81920];
+                        int count;
+                        while ((count = await input.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                        {
+                            await fs.WriteAsync(buffer, 0, count);
+                            transferred += count;
+                            UpdateTransferProgress(transferred, total);
+                        }
+                        await fs.FlushAsync();
+                    }
+
+                    if (total >= 0 && transferred != total)
+                        throw new IOException("La descarga llegó incompleta.");
+
+                    File.Move(temporaryPath, destPath, true);
                     TxtStatus.Text = "Descarga completada";
                 }
                 catch (Exception ex)
                 {
                     TxtStatus.Text = $"Error descarga: {ex.Message}";
+                }
+                finally
+                {
+                    if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
+                    HideTransfer();
                 }
             }
         }
@@ -415,7 +605,7 @@ public partial class MainWindow : Window
         {
             try
             {
-                string relativePath = $"/{Uri.EscapeDataString(dto.Nombre)}";
+                string relativePath = Uri.EscapeDataString(GetRemotePath(dto.Nombre));
                 var response = await _httpClient.DeleteAsync($"/api/delete?path={relativePath}");
                 response.EnsureSuccessStatusCode();
                 TxtStatus.Text = "Eliminado";
@@ -428,11 +618,52 @@ public partial class MainWindow : Window
         }
     }
 
+    private void ShowTransfer(string message)
+    {
+        Interlocked.Exchange(ref _lastProgressUpdate, 0);
+        _transferMessage = message;
+        TxtTransferStatus.Text = _transferMessage;
+        PrgTransfer.Value = 0;
+        TransferPanel.IsVisible = true;
+    }
+
+    private void UpdateTransferProgress(long transferred, long total)
+    {
+        long now = Environment.TickCount64;
+        if (total > transferred && now - Interlocked.Read(ref _lastProgressUpdate) < 150) return;
+        Interlocked.Exchange(ref _lastProgressUpdate, now);
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (total > 0)
+            {
+                PrgTransfer.Value = Math.Min(100, transferred * 100d / total);
+                if (transferred >= total)
+                {
+                    string nextStep = _transferMessage.StartsWith("Subiendo", StringComparison.Ordinal)
+                        ? "esperando confirmación del servidor"
+                        : "verificando descarga";
+                    TxtTransferStatus.Text = $"{_transferMessage} • {nextStep}";
+                }
+                else
+                {
+                    TxtTransferStatus.Text = $"{_transferMessage} • {transferred / 1048576d:0.#} / {total / 1048576d:0.#} MB";
+                }
+            }
+        });
+    }
+
+    private void HideTransfer()
+    {
+        Dispatcher.UIThread.Post(() => TransferPanel.IsVisible = false);
+    }
+
     private void BtnLogout_Click(object? sender, RoutedEventArgs e)
     {
         _token = string.Empty;
         _username = string.Empty;
         _role = "Estandar";
+        _currentPath = string.Empty;
 
         if (_httpClient != null)
         {

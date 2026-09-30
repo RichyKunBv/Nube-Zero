@@ -13,11 +13,13 @@ namespace NubeZero.Server.Controllers
     {
         private readonly StorageService _storageService;
         private readonly NubeZero.Server.Data.DatabaseContext _dbContext;
+        private readonly UploadQueueService _uploadQueue;
         
-        public FileController(StorageService storageService, NubeZero.Server.Data.DatabaseContext dbContext)
+        public FileController(StorageService storageService, NubeZero.Server.Data.DatabaseContext dbContext, UploadQueueService uploadQueue)
         {
             _storageService = storageService;
             _dbContext = dbContext;
+            _uploadQueue = uploadQueue;
         }
 
         public async Task HandleListDirectoryAsync(HttpListenerContext context, string relativePath)
@@ -123,10 +125,37 @@ namespace NubeZero.Server.Controllers
             }
         }
 
-        public async Task HandleUploadAsync(HttpListenerContext context, string relativePath, string username)
+        public async Task HandleUploadAsync(HttpListenerContext context, string relativePath, string username, string sessionToken)
+        {
+            var response = context.Response;
+            try
+            {
+            _dbContext.ExtendSessionForLongOperation(sessionToken);
+                await _uploadQueue.EnqueueAsync(() => HandleUploadCoreAsync(context, relativePath, username));
+            }
+            catch (UploadQueueFullException)
+            {
+                response.AddHeader("Retry-After", "15");
+                await WriteErrorAsync(response, 503, "La cola de subidas está llena. Inténtelo de nuevo en unos segundos.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error en cola de subida: {ex.Message}");
+                context.Response.Abort();
+            }
+            finally
+            {
+                _dbContext.RefreshSessionAfterLongOperation(sessionToken);
+                response.Close();
+            }
+        }
+
+        private async Task HandleUploadCoreAsync(HttpListenerContext context, string relativePath, string username)
         {
             var request = context.Request;
             var response = context.Response;
+            string temporaryPath = null;
+
             try
             {
                 if (string.IsNullOrWhiteSpace(relativePath))
@@ -136,26 +165,42 @@ namespace NubeZero.Server.Controllers
                 }
 
                 string safePath = _storageService.GetSafePath(relativePath);
-
-                // Asegurar que el directorio padre exista
                 string parentDir = Path.GetDirectoryName(safePath);
                 if (parentDir != null && !Directory.Exists(parentDir))
                 {
                     Directory.CreateDirectory(parentDir);
                 }
 
-                long fileLength = request.ContentLength64 > 0 ? request.ContentLength64 : 0;
+                temporaryPath = Path.Combine(parentDir ?? _storageService.BasePath, ".nubezero-" + Guid.NewGuid().ToString("N") + ".upload");
+                long expectedLength = request.ContentLength64;
+                long receivedLength;
 
-                // Escribir directamente desde el InputStream al disco
-                using (var fs = new FileStream(safePath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
+                using (var fs = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true))
                 {
                     await request.InputStream.CopyToAsync(fs, 81920);
-                    if (fileLength == 0) fileLength = fs.Length;
+                    receivedLength = fs.Length;
+                    await fs.FlushAsync();
                 }
 
-                _dbContext.SaveFileMetadata(safePath, username, fileLength);
+                if (expectedLength >= 0 && receivedLength != expectedLength)
+                {
+                    await WriteErrorAsync(response, 400, "La subida llegó incompleta; el archivo anterior se conservó.");
+                    return;
+                }
 
-                response.StatusCode = 201; // Created
+                if (File.Exists(safePath))
+                {
+                    File.Replace(temporaryPath, safePath, null);
+                }
+                else
+                {
+                    File.Move(temporaryPath, safePath);
+                }
+                temporaryPath = null;
+
+                _dbContext.SaveFileMetadata(safePath, username, receivedLength);
+
+                response.StatusCode = 201;
                 response.ContentType = "application/json";
                 byte[] buffer = System.Text.Encoding.UTF8.GetBytes("{\"status\":\"ok\"}");
                 await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
@@ -167,10 +212,14 @@ namespace NubeZero.Server.Controllers
             catch (Exception ex)
             {
                 Console.WriteLine($"Error subida: {ex.Message}");
-                await WriteErrorAsync(response, 500, $"Error interno: {ex.Message}");
+                await WriteErrorAsync(response, 500, "Error interno al guardar el archivo.");
             }
             finally
             {
+                if (temporaryPath != null && File.Exists(temporaryPath))
+                {
+                    try { File.Delete(temporaryPath); } catch { }
+                }
                 response.Close();
             }
         }

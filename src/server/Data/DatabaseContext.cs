@@ -213,7 +213,7 @@ namespace NubeZero.Server.Data
                 {
                     Token = token,
                     UserId = user.Id,
-                    FechaExpiracion = DateTime.UtcNow.AddMinutes(5)
+                    FechaExpiracion = DateTime.UtcNow.AddMinutes(30)
                 });
                 Save();
 
@@ -241,8 +241,7 @@ namespace NubeZero.Server.Data
                 var session = _state.Sesiones.FirstOrDefault(s => s.Token == token && s.FechaExpiracion > DateTime.UtcNow);
                 if (session == null) return null;
 
-                // Renovar la sesión por 5 minutos adicionales (inactividad)
-                session.FechaExpiracion = DateTime.UtcNow.AddMinutes(5);
+                session.FechaExpiracion = DateTime.UtcNow.AddMinutes(30);
 
                 var user = _state.Usuarios.FirstOrDefault(u => u.Id == session.UserId);
                 if (user == null) return null;
@@ -259,6 +258,30 @@ namespace NubeZero.Server.Data
         public string ValidateTokenAndGetUser(string token)
         {
             return ValidateToken(token)?.Username;
+        }
+
+        public void ExtendSessionForLongOperation(string token)
+        {
+            lock (_lock)
+            {
+                var session = _state.Sesiones.FirstOrDefault(s => s.Token == token);
+                if (session != null)
+                {
+                    session.FechaExpiracion = DateTime.UtcNow.AddHours(2).AddMinutes(10);
+                }
+            }
+        }
+
+        public void RefreshSessionAfterLongOperation(string token)
+        {
+            lock (_lock)
+            {
+                var session = _state.Sesiones.FirstOrDefault(s => s.Token == token);
+                if (session != null)
+                {
+                    session.FechaExpiracion = DateTime.UtcNow.AddMinutes(30);
+                }
+            }
         }
 
         public List<NubeZero.Shared.UserDTO> ListUsers()

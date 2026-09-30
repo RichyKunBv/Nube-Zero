@@ -2,7 +2,7 @@
 
 # Nube-Zero ☁️
 
-[![Versión](https://img.shields.io/badge/Versión-v0.7.2-blue.svg)](https://github.com/RichyKunBv/Nube-Zero)
+[![Versión](https://img.shields.io/badge/Versión-v0.7.3-blue.svg)](https://github.com/RichyKunBv/Nube-Zero)
 [![Status](https://img.shields.io/badge/Estado-Desarrollo-yellow.svg)](https://github.com/RichyKunBv/Nube-Zero)
 [![Licencia](https://img.shields.io/badge/Licencia-Apache_2.0-orange.svg)](https://github.com/RichyKunBv/Nube-Zero/blob/main/LICENSE)
 ---
@@ -21,6 +21,8 @@
 - 📥 **Descargas Android más fiables (v0.7.1)**: selector nativo para guardar directamente en Descargas u otra ubicación, sin depender del menú Compartir del fabricante.
 - 🔄 **Actualización desde el cliente (v0.7.1)**: comprueba GitHub y abre el instalador de la plataforma; en Android descarga el APK y solicita confirmación al instalador del sistema.
 - 📏 **Tamaños de archivo claros**: la interfaz etiqueta KiB/MiB/GiB para indicar explícitamente que convierte usando base 1024.
+- 📊 **Transferencias más claras y seguras (v0.7.3)**: progreso de subida/descarga, cola FIFO de una escritura activa, sesiones extendidas durante operaciones largas y publicación de archivos solo después de verificar su recepción completa.
+- 🗂️ **Navegación y vistas previas (v0.7.3)**: navegación por carpetas, iconos por tipo y miniaturas de imágenes generadas y cacheadas en los clientes. Los primeros fotogramas de video se generan localmente para clips de hasta 32 MiB; en escritorio se requiere `ffmpeg` disponible en el sistema.
 - 🔍 **Descubrimiento Automático Silencioso (v0.6.0)**: Encuentra tus servidores Nube-Zero en la red local bajo demanda con un solo clic (`🔍`). Funciona mediante un protocolo reactivo *Probe-Response* por UDP con clave de autenticación: **cero saturación de Wi-Fi, cero pings continuos y 0% de uso de CPU en reposo**.
 - 🏷️ **Soporte Multi-servidor y Nombres Personalizados**: Cada Raspberry Pi puede tener su propio nombre identificador (`--name "Mi Servidor"`), facilitando elegir entre múltiples servidores desde la pantalla de inicio de los clientes.
 - 👥 **Sistema de Roles y Usuarios Granular (v0.5.0)**:
@@ -195,3 +197,19 @@ sda           8:0    1 14.5G  0 disk
 ├─sda1        8:1    1  200M  0 part
 └─sda2        8:2    1 14.3G  0 part
 ```
+
+---
+
+## ⚠️ Aviso de Ciclo de Vida y Soporte de Hardware (Pi Zero W)
+
+> [!WARNING]
+> **Fin de prioridad para la arquitectura ARMv6 (32 bits)**
+>
+> A partir de **enero de 2028**, el desarrollo de Nube-Zero dejará de priorizar la compatibilidad con la **Raspberry Pi Zero W original** (y hardware ARMv6 de 32 bits equivalente). 
+> 
+> A partir de esa fecha, el requisito mínimo oficial de hardware recomendado pasará a ser la **Raspberry Pi Zero 2 W** (o superior), migrando el núcleo del servidor de forma definitiva hacia **.NET nativo de 64 bits (ARM64)** sobre sistemas operativos modernos.
+
+### ¿Por qué esta decisión?
+**Seguridad del Sistema Operativo:** El sistema operativo base para esta placa (Raspberry Pi OS 13 / Debian Trixie) finalizará su soporte estándar de seguridad a mediados de 2028, dejando al servidor expuesto a vulnerabilidades de red.
+
+*Nota: Las versiones de Nube-Zero optimizadas para Mono (`net472`) publicadas antes de enero de 2028 permanecerán disponibles en el historial de Releases para su uso local en modo congelado ("appliance"), pero no recibirán nuevas funciones ni parches.*
