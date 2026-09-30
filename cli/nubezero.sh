@@ -32,6 +32,129 @@ function pause_menu() {
   read -r
 }
 
+function repair_dns() {
+  echo -e "\n${CYAN}[+] Reparando resolución DNS...${NC}"
+  local dns_file="/tmp/resolv.conf"
+  local dns_location="/tmp (temporal)"
+
+  if mountpoint -q /mnt/nubezero_usb 2>/dev/null; then
+    if mkdir -p /mnt/nubezero_usb/basurero 2>/dev/null; then
+      dns_file="/mnt/nubezero_usb/basurero/resolv.conf"
+      dns_location="USB montada"
+    else
+      echo -e "${YELLOW}La USB está montada, pero no se pudo preparar su carpeta DNS; usaré /tmp.${NC}"
+    fi
+  fi
+
+  if ! printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > "$dns_file"; then
+    if [ "$dns_file" != "/tmp/resolv.conf" ]; then
+      echo -e "${YELLOW}No se pudo escribir en la USB; usaré /tmp como alternativa.${NC}"
+      dns_file="/tmp/resolv.conf"
+      dns_location="/tmp (temporal)"
+      if ! printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > "$dns_file"; then
+        echo -e "${RED}No se pudo escribir /tmp/resolv.conf.${NC}"
+        return 1
+      fi
+    else
+      echo -e "${RED}No se pudo escribir /tmp/resolv.conf.${NC}"
+      return 1
+    fi
+  fi
+
+  if [ ! -L /etc/resolv.conf ] || [ "$(readlink /etc/resolv.conf 2>/dev/null)" != "$dns_file" ]; then
+    rm -f /etc/resolv.conf
+    if ! ln -s "$dns_file" /etc/resolv.conf; then
+      echo -e "${RED}No se pudo enlazar /etc/resolv.conf.${NC}"
+      return 1
+    fi
+  fi
+
+  echo -e "${GREEN}✓ DNS guardado en $dns_file ($dns_location).${NC}"
+  if [ "$dns_location" = "/tmp (temporal)" ]; then
+    echo -e "${YELLOW}Sin USB montada, esta reparación puede perderse al reiniciar.${NC}"
+  fi
+  if getent hosts github.com >/dev/null 2>&1; then
+    echo -e "${GREEN}✓ Resolución de nombres verificada.${NC}"
+  else
+    echo -e "${YELLOW}La configuración se guardó, pero no hay resolución. Revisa la conexión de red.${NC}"
+  fi
+}
+
+function repair_time() {
+  echo -e "\n${CYAN}[+] Sincronizando fecha y hora...${NC}"
+  if ! command -v timedatectl >/dev/null 2>&1; then
+    echo -e "${RED}timedatectl no está disponible en este sistema.${NC}"
+    return 1
+  fi
+
+  timedatectl set-ntp true >/dev/null 2>&1 || true
+  if systemctl list-unit-files systemd-timesyncd.service >/dev/null 2>&1; then
+    systemctl restart systemd-timesyncd 2>/dev/null || true
+  fi
+
+  local synchronized
+  synchronized=$(timedatectl show -p NTPSynchronized --value 2>/dev/null)
+  if [ "$synchronized" = "yes" ]; then
+    echo -e "${GREEN}✓ Hora sincronizada por red (NTP): $(date).${NC}"
+    return 0
+  fi
+
+  echo -e "${YELLOW}NTP todavía no confirmó la sincronización.${NC}"
+  echo -ne "¿Quieres establecer la fecha y hora manualmente? [s/N]: "
+  local confirm manual_date
+  read -r confirm
+  if [[ ! "$confirm" =~ ^[Ss]$ ]]; then
+    return 0
+  fi
+
+  echo -ne "Fecha y hora (YYYY-MM-DD HH:MM:SS): "
+  read -r manual_date
+  if ! date -d "$manual_date" >/dev/null 2>&1; then
+    echo -e "${RED}Formato de fecha no válido; no se cambió el reloj.${NC}"
+    return 1
+  fi
+
+  if date -s "$manual_date" >/dev/null; then
+    echo -e "${GREEN}✓ Fecha establecida: $(date).${NC}"
+  else
+    echo -e "${RED}No se pudo establecer la fecha y hora.${NC}"
+    return 1
+  fi
+}
+
+function menu_system_repair() {
+  while true; do
+    print_header
+    echo -e "${CYAN}--- Reparación rápida del sistema ---${NC}"
+    echo "  1) Reparar DNS"
+    echo "  2) Sincronizar / ajustar fecha y hora"
+    echo "  3) Recargar configuración de systemd"
+    echo "  4) Ejecutar las tres reparaciones"
+    echo "  0) Volver"
+    echo ""
+    echo -ne "${CYAN}Selecciona una opción [0-4]: ${NC}"
+    local repair_option
+    read -r repair_option
+
+    case "$repair_option" in
+      1) repair_dns; pause_menu ;;
+      2) repair_time; pause_menu ;;
+      3)
+        systemctl daemon-reload && echo -e "${GREEN}✓ Configuración de systemd recargada.${NC}" || echo -e "${RED}No se pudo recargar systemd.${NC}"
+        pause_menu
+        ;;
+      4)
+        repair_dns
+        repair_time
+        systemctl daemon-reload && echo -e "${GREEN}✓ Configuración de systemd recargada.${NC}" || echo -e "${RED}No se pudo recargar systemd.${NC}"
+        pause_menu
+        ;;
+      0) return ;;
+      *) echo -e "${RED}Opción no válida.${NC}"; sleep 1 ;;
+    esac
+  done
+}
+
 # Helper para actualizar ExecStart en el archivo systemd sin duplicar lógica ni romper flags
 function update_systemd_service() {
   local target_port=$1
@@ -441,9 +564,10 @@ function run_config() {
     echo "  7) 🔄 Reiniciar Servicio Nube-Zero"
     echo "  8) 📜 Ver Logs del Servicio en Tiempo Real"
     echo "  9) 🚀 Actualizar SOLO esta herramienta CLI (desde main)"
+    echo " 10) 🧰 Reparación rápida del sistema"
     echo "  0) 🚪 Salir"
     echo ""
-    echo -ne "${CYAN}Selecciona una opción [0-9]: ${NC}"
+    echo -ne "${CYAN}Selecciona una opción [0-10]: ${NC}"
     read -r OPTION
 
     case "$OPTION" in
@@ -465,6 +589,7 @@ function run_config() {
       9)
         update_cli
         ;;
+      10) menu_system_repair ;;
       0|q|Q)
         echo -e "\n${GREEN}Saliendo de la configuración de Nube-Zero.${NC}"
         break

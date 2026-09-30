@@ -206,13 +206,23 @@ function action_update() {
     exit 1
   fi
   
-  CURRENT_PORT=$(grep "ExecStart" "$SERVICE_FILE" | grep -oP '(?<=--port )\d+')
+  local exec_start
+  exec_start=$(sed -n 's/^ExecStart=//p' "$SERVICE_FILE" | head -n 1)
+  if [ -z "$exec_start" ]; then
+    echo -e "${RED}No se encontró una línea ExecStart válida en $SERVICE_FILE.${NC}"
+    exit 1
+  fi
+
+  CURRENT_PORT=$(printf '%s\n' "$exec_start" | sed -nE 's/.*--port ([0-9]+).*/\1/p')
   if [ -z "$CURRENT_PORT" ]; then
     CURRENT_PORT=8080
   fi
   
-  CURRENT_STORAGE=$(grep "ExecStart" "$SERVICE_FILE" | grep -oP '(?<=--storage )\S+')
-  CURRENT_NAME=$(grep "ExecStart" "$SERVICE_FILE" | grep -oP '(?<=--name ")[^"]+' || grep "ExecStart" "$SERVICE_FILE" | grep -oP '(?<=--name )\S+')
+  CURRENT_STORAGE=$(printf '%s\n' "$exec_start" | sed -nE 's/.*--storage ([^[:space:]]+).*/\1/p')
+  CURRENT_NAME=$(printf '%s\n' "$exec_start" | sed -nE 's/.*--name "([^"]*)".*/\1/p')
+  if [ -z "$CURRENT_NAME" ]; then
+    CURRENT_NAME=$(printf '%s\n' "$exec_start" | sed -nE 's/.*--name ([^[:space:]]+).*/\1/p')
+  fi
   
   # Forzar que el sistema siempre apunte a la ruta de instalación oficial
   NEW_EXEC_START="ExecStart=/usr/bin/mono $INSTALL_DIR/bin/NubeZero.Server.exe --port $CURRENT_PORT"
