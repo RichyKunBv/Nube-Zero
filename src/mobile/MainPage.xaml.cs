@@ -514,28 +514,28 @@ public partial class MainPage : ContentPage
             {
                 try
                 {
-                    TxtStatus.Text = $"Descargando {dto.Nombre}...";
-                    string relativePath = $"/{Uri.EscapeDataString(dto.Nombre)}";
-                    var response = await _httpClient.GetAsync($"/api/download?path={relativePath}", HttpCompletionOption.ResponseHeadersRead);
-                    response.EnsureSuccessStatusCode();
-
                     string safeFileName = Path.GetFileName(dto.Nombre);
                     if (string.IsNullOrWhiteSpace(safeFileName)) safeFileName = "archivo_descargado";
-                    string localFile = Path.Combine(FileSystem.CacheDirectory, safeFileName);
+                    var activity = Microsoft.Maui.ApplicationModel.Platform.CurrentActivity as MainActivity
+                        ?? throw new InvalidOperationException("No se pudo abrir el selector de destino Android.");
 
-                    using (var stream = await response.Content.ReadAsStreamAsync())
-                    using (var fs = File.Create(localFile))
+                    TxtStatus.Text = "Selecciona dónde guardar el archivo...";
+                    var destination = await activity.PickSaveDestinationAsync(safeFileName);
+                    if (destination == null)
                     {
-                        await stream.CopyToAsync(fs);
+                        TxtStatus.Text = "Guardado cancelado";
+                        return;
                     }
 
-                    await Share.RequestAsync(new ShareFileRequest
-                    {
-                        Title = $"Guardar {safeFileName}",
-                        File = new ShareFile(localFile)
-                    });
-                    
-                    TxtStatus.Text = "Descarga lista";
+                    TxtStatus.Text = $"Descargando {safeFileName}...";
+                    string relativePath = $"/{Uri.EscapeDataString(dto.Nombre)}";
+                    using var response = await _httpClient.GetAsync($"/api/download?path={relativePath}", HttpCompletionOption.ResponseHeadersRead);
+                    response.EnsureSuccessStatusCode();
+
+                    using var stream = await response.Content.ReadAsStreamAsync();
+                    TxtStatus.Text = "Guardando en la ubicación seleccionada...";
+                    await activity.CopyToSaveDestinationAsync(destination, stream);
+                    TxtStatus.Text = "Archivo guardado correctamente";
                 }
                 catch (Exception ex)
                 {
@@ -592,12 +592,16 @@ public class BytesToSizeConverter : IValueConverter
     {
         if (value is long bytes)
         {
-            string[] suf = { "B", "KB", "MB", "GB", "TB" };
+            string[] suf = { "B", "KiB", "MiB", "GiB", "TiB" };
             if (bytes == 0) return "0 B";
-            long bytesCopy = Math.Abs(bytes);
-            int place = System.Convert.ToInt32(Math.Floor(Math.Log(bytesCopy, 1024)));
-            double num = Math.Round(bytesCopy / Math.Pow(1024, place), 1);
-            return (Math.Sign(bytes) * num).ToString() + " " + suf[place];
+            double size = bytes;
+            int place = 0;
+            while (Math.Abs(size) >= 1024 && place < suf.Length - 1)
+            {
+                size /= 1024;
+                place++;
+            }
+            return $"{size.ToString("0.#", culture)} {suf[place]}";
         }
         return value;
     }

@@ -12,6 +12,9 @@ namespace NubeZero.Mobile;
 [IntentFilter(new[] { Intent.ActionSendMultiple }, Categories = new[] { Intent.CategoryDefault }, DataMimeType = "*/*")]
 public class MainActivity : MauiAppCompatActivity
 {
+    private const int SaveDocumentRequestCode = 5021;
+    private TaskCompletionSource<Android.Net.Uri?>? _saveDestinationCompletion;
+
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
@@ -22,6 +25,51 @@ public class MainActivity : MauiAppCompatActivity
     {
         base.OnNewIntent(intent);
         ProcessIntent(intent);
+    }
+
+    public Task<Android.Net.Uri?> PickSaveDestinationAsync(string fileName)
+    {
+        if (_saveDestinationCompletion != null)
+            throw new InvalidOperationException("Ya hay una selección de destino en curso.");
+
+        var completion = new TaskCompletionSource<Android.Net.Uri?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _saveDestinationCompletion = completion;
+
+        var intent = new Intent(Intent.ActionCreateDocument);
+        intent.AddCategory(Intent.CategoryOpenable);
+        intent.SetType("*/*");
+        intent.PutExtra(Intent.ExtraTitle, fileName);
+
+        try
+        {
+            StartActivityForResult(intent, SaveDocumentRequestCode);
+        }
+        catch
+        {
+            _saveDestinationCompletion = null;
+            throw;
+        }
+
+        return completion.Task;
+    }
+
+    public async Task CopyToSaveDestinationAsync(Android.Net.Uri destination, System.IO.Stream source)
+    {
+        using var output = ContentResolver?.OpenOutputStream(destination, "w")
+            ?? throw new InvalidOperationException("Android no pudo abrir el destino seleccionado.");
+        await source.CopyToAsync(output, 81920);
+        await output.FlushAsync();
+    }
+
+    protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
+    {
+        base.OnActivityResult(requestCode, resultCode, data);
+
+        if (requestCode != SaveDocumentRequestCode) return;
+
+        var completion = _saveDestinationCompletion;
+        _saveDestinationCompletion = null;
+        completion?.TrySetResult(resultCode == Result.Ok ? data?.Data : null);
     }
 
     private void ProcessIntent(Intent? intent)

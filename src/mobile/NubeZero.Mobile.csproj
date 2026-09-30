@@ -18,8 +18,7 @@
 		<ApplicationTitle>NubeZero</ApplicationTitle>
 		<ApplicationId>com.companyname.nubezero.mobile</ApplicationId>
 		<ApplicationDisplayVersion>$(Version)</ApplicationDisplayVersion>
-		<!-- Increment this integer for every Android release; keep ApplicationId unchanged. -->
-		<ApplicationVersion>7000</ApplicationVersion>
+		<ApplicationVersion>$([System.Text.RegularExpressions.Regex]::Match($(VersionFileContent), 'class AndroidVersion[\s\S]*?Texto[\s\S]*?&quot;([0-9]+)&quot;').Groups[1].Value)</ApplicationVersion>
 
 		<SupportedOSPlatformVersion>21.0</SupportedOSPlatformVersion>
 	</PropertyGroup>

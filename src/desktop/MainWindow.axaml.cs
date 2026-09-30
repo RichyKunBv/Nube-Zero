@@ -606,12 +606,16 @@ public class BytesToSizeConverter : IValueConverter
     {
         if (value is long bytes)
         {
-            string[] suf = { "B", "KB", "MB", "GB", "TB" };
+            string[] suf = { "B", "KiB", "MiB", "GiB", "TiB" };
             if (bytes == 0) return "0 B";
-            long bytesCopy = Math.Abs(bytes);
-            int place = System.Convert.ToInt32(Math.Floor(Math.Log(bytesCopy, 1024)));
-            double num = Math.Round(bytesCopy / Math.Pow(1024, place), 1);
-            return (Math.Sign(bytes) * num).ToString() + " " + suf[place];
+            double size = bytes;
+            int place = 0;
+            while (Math.Abs(size) >= 1024 && place < suf.Length - 1)
+            {
+                size /= 1024;
+                place++;
+            }
+            return $"{size.ToString("0.#", culture)} {suf[place]}";
         }
         return value;
     }
