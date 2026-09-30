@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Net.Http;
@@ -192,6 +193,61 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             ShowLoginError($"Error de conexión: {ex.Message}");
+        }
+    }
+
+    private async void BtnCheckUpdates_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button button) button.IsEnabled = false;
+        SetUpdateStatus("Buscando actualización...");
+
+        try
+        {
+            string assetName = UpdateService.GetCurrentAssetName();
+            var result = await UpdateService.CheckForUpdatesAsync(AppVersion.Texto, assetName);
+
+            if (result.status == UpdateStatus.UpToDate)
+            {
+                SetUpdateStatus($"Ya tienes la versión {AppVersion.Texto}.");
+            }
+            else if (result.status == UpdateStatus.Newer)
+            {
+                SetUpdateStatus("Esta versión es más nueva que la última publicada.");
+            }
+            else if (result.status == UpdateStatus.Outdated && result.downloadUrl != null)
+            {
+                SetUpdateStatus($"Descargando el instalador de v{result.latestVersion} en el navegador...");
+                Process.Start(new ProcessStartInfo(result.downloadUrl) { UseShellExecute = true });
+            }
+            else if (result.status == UpdateStatus.Outdated)
+            {
+                SetUpdateStatus($"v{result.latestVersion} está disponible, pero no hay instalador para {assetName}.");
+            }
+            else
+            {
+                SetUpdateStatus("No se pudo consultar GitHub. Revisa tu conexión e inténtalo de nuevo.");
+            }
+        }
+        catch (Exception ex)
+        {
+            SetUpdateStatus($"No se pudo abrir la actualización: {ex.Message}");
+        }
+        finally
+        {
+            if (sender is Button updateButton) updateButton.IsEnabled = true;
+        }
+    }
+
+    private void SetUpdateStatus(string message)
+    {
+        if (LoginView.IsVisible)
+        {
+            TxtUpdateStatus.Text = message;
+            TxtUpdateStatus.IsVisible = true;
+        }
+        else
+        {
+            TxtStatus.Text = message;
         }
     }
 

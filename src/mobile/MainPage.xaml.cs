@@ -160,6 +160,76 @@ public partial class MainPage : ContentPage
         }
     }
 
+    private async void BtnCheckUpdates_Clicked(object sender, EventArgs e)
+    {
+        if (sender is Button button) button.IsEnabled = false;
+        SetUpdateStatus("Buscando actualización...");
+
+        try
+        {
+            string assetName = UpdateService.GetCurrentAssetName(isAndroid: true);
+            var result = await UpdateService.CheckForUpdatesAsync(AppVersion.Texto, assetName);
+
+            if (result.status == UpdateStatus.UpToDate)
+            {
+                SetUpdateStatus($"Ya tienes la versión {AppVersion.Texto}.");
+                return;
+            }
+
+            if (result.status == UpdateStatus.Newer)
+            {
+                SetUpdateStatus("Esta versión es más nueva que la última publicada.");
+                return;
+            }
+
+            if (result.status != UpdateStatus.Outdated || result.downloadUrl == null)
+            {
+                SetUpdateStatus(result.status == UpdateStatus.Outdated
+                    ? $"v{result.latestVersion} está disponible, pero no se encontró el APK."
+                    : "No se pudo consultar GitHub. Revisa tu conexión e inténtalo de nuevo.");
+                return;
+            }
+
+            bool install = await DisplayAlert(
+                "Actualización disponible",
+                $"Se descargará Nube-Zero v{result.latestVersion} y se abrirá el instalador de Android.",
+                "Continuar",
+                "Cancelar");
+            if (!install) return;
+
+            SetUpdateStatus($"Descargando v{result.latestVersion}...");
+            string apkPath = Path.Combine(FileSystem.CacheDirectory, "NubeZero-update.apk");
+            await UpdateService.DownloadFileAsync(result.downloadUrl, apkPath);
+
+            SetUpdateStatus("Abriendo el instalador de Android...");
+            await Launcher.Default.OpenAsync(new OpenFileRequest(
+                $"Instalar Nube-Zero v{result.latestVersion}",
+                new ReadOnlyFile(apkPath)));
+            SetUpdateStatus("Confirma la actualización en Android para terminar.");
+        }
+        catch (Exception ex)
+        {
+            SetUpdateStatus($"No se pudo actualizar: {ex.Message}");
+        }
+        finally
+        {
+            if (sender is Button updateButton) updateButton.IsEnabled = true;
+        }
+    }
+
+    private void SetUpdateStatus(string message)
+    {
+        if (LoginView.IsVisible)
+        {
+            TxtUpdateStatus.Text = message;
+            TxtUpdateStatus.IsVisible = true;
+        }
+        else
+        {
+            TxtStatus.Text = message;
+        }
+    }
+
     private async Task AuthenticateAsync(string user, string password)
     {
         InitHttpClient();

@@ -2,7 +2,7 @@
 
 # Nube-Zero ☁️
 
-[![Versión](https://img.shields.io/badge/Versión-v0.7.1-blue.svg)](https://github.com/RichyKunBv/Nube-Zero)
+[![Versión](https://img.shields.io/badge/Versión-v0.7.2-blue.svg)](https://github.com/RichyKunBv/Nube-Zero)
 [![Status](https://img.shields.io/badge/Estado-Desarrollo-yellow.svg)](https://github.com/RichyKunBv/Nube-Zero)
 [![Licencia](https://img.shields.io/badge/Licencia-Apache_2.0-orange.svg)](https://github.com/RichyKunBv/Nube-Zero/blob/main/LICENSE)
 ---
@@ -19,6 +19,7 @@
 - 📦 **Subida de archivos grandes (v0.7.1)**: transferencias en streaming con un timeout ampliado para evitar cortes en archivos de varios cientos de MB.
 - 🔐 **Recordar credenciales de forma segura (v0.7.1)**: opción para guardar la contraseña en el almacenamiento seguro de Android o en el llavero de macOS y recuperar la sesión al volver a abrir la aplicación.
 - 📥 **Descargas Android más fiables (v0.7.1)**: selector nativo para guardar directamente en Descargas u otra ubicación, sin depender del menú Compartir del fabricante.
+- 🔄 **Actualización desde el cliente (v0.7.1)**: comprueba GitHub y abre el instalador de la plataforma; en Android descarga el APK y solicita confirmación al instalador del sistema.
 - 📏 **Tamaños de archivo claros**: la interfaz etiqueta KiB/MiB/GiB para indicar explícitamente que convierte usando base 1024.
 - 🔍 **Descubrimiento Automático Silencioso (v0.6.0)**: Encuentra tus servidores Nube-Zero en la red local bajo demanda con un solo clic (`🔍`). Funciona mediante un protocolo reactivo *Probe-Response* por UDP con clave de autenticación: **cero saturación de Wi-Fi, cero pings continuos y 0% de uso de CPU en reposo**.
 - 🏷️ **Soporte Multi-servidor y Nombres Personalizados**: Cada Raspberry Pi puede tener su propio nombre identificador (`--name "Mi Servidor"`), facilitando elegir entre múltiples servidores desde la pantalla de inicio de los clientes.

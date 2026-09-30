@@ -20,7 +20,7 @@
         <Grid x:Name="MainView" IsVisible="False" RowDefinitions="Auto, *">
             <!-- HEADER -->
             <Frame Grid.Row="0" Margin="15,40,15,10" BackgroundColor="#20FFFFFF" CornerRadius="12" BorderColor="Transparent" Padding="15">
-                <Grid ColumnDefinitions="*, Auto, Auto, Auto, Auto">
+                <Grid ColumnDefinitions="*, Auto, Auto, Auto, Auto, Auto">
                     <VerticalStackLayout VerticalOptions="Center">
                         <Label Text="☁️ Nube-Zero" FontSize="20" FontAttributes="Bold" TextColor="White" />
                         <Label x:Name="TxtUserInfo" Text="" TextColor="#00D2FF" FontSize="11" FontAttributes="Bold"/>
@@ -30,6 +30,7 @@
                     <Button Grid.Column="2" x:Name="BtnUsersAdmin" Text="👥" Clicked="BtnUsersAdmin_Clicked" BackgroundColor="#30FFFFFF" TextColor="White" CornerRadius="8" HeightRequest="38" WidthRequest="38" Margin="0,0,5,0" Padding="0" IsVisible="False"/>
                     <Button Grid.Column="3" Text="🔑" Clicked="BtnChangePassword_Clicked" BackgroundColor="#30FFFFFF" TextColor="White" CornerRadius="8" HeightRequest="38" WidthRequest="38" Margin="0,0,5,0" Padding="0"/>
                     <Button Grid.Column="4" Text="Salir" Clicked="BtnLogout_Clicked" BackgroundColor="#FF5555" TextColor="White" FontAttributes="Bold" CornerRadius="8" HeightRequest="38" Padding="10,0"/>
+                    <Button Grid.Column="5" Text="⬇" Clicked="BtnCheckUpdates_Clicked" BackgroundColor="#30FFFFFF" TextColor="White" CornerRadius="8" HeightRequest="38" WidthRequest="38" Margin="5,0,0,0" Padding="0" SemanticProperties.Description="Buscar actualizaciones"/>
                 </Grid>
             </Frame>
 
@@ -93,6 +94,8 @@
                     <Label x:Name="TxtLoginError" TextColor="#FF5555" HorizontalOptions="Center" IsVisible="False"/>
                     
                     <Button Text="Conectar" Clicked="BtnLogin_Clicked" BackgroundColor="#00D2FF" TextColor="White" FontAttributes="Bold" CornerRadius="8" Margin="0,10,0,0"/>
+                    <Button x:Name="BtnCheckUpdates" Text="Buscar actualizaciones" Clicked="BtnCheckUpdates_Clicked" BackgroundColor="#30FFFFFF" TextColor="White" CornerRadius="8"/>
+                    <Label x:Name="TxtUpdateStatus" TextColor="#00D2FF" FontSize="11" HorizontalOptions="Center" IsVisible="False"/>
                 </VerticalStackLayout>
             </Frame>
         </Grid>
