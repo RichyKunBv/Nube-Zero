@@ -141,7 +141,6 @@ public partial class MainPage : ContentPage
         var handler = new SocketsHttpHandler
         {
             PooledConnectionLifetime = TimeSpan.FromMinutes(15),
-            ResponseHeaderReadTimeout = TimeSpan.FromHours(2),
             ConnectTimeout = TimeSpan.FromSeconds(30),
             EnableMultipleHttp2Connections = true
         };
