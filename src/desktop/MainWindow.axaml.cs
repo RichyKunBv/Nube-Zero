@@ -229,8 +229,32 @@ public partial class MainWindow : Window
             }
             else if (result.status == UpdateStatus.Outdated && result.downloadUrl != null)
             {
-                SetUpdateStatus($"Descargando el instalador de v{result.latestVersion} en el navegador...");
-                Process.Start(new ProcessStartInfo(result.downloadUrl) { UseShellExecute = true });
+                string tempDir = Path.Combine(Path.GetTempPath(), "NubeZeroUpdates");
+                Directory.CreateDirectory(tempDir);
+                string installerPath = Path.Combine(tempDir, assetName);
+
+                var progress = new Progress<(long bytesRead, long? totalBytes)>(p =>
+                {
+                    if (p.totalBytes.HasValue && p.totalBytes.Value > 0)
+                    {
+                        double percent = (double)p.bytesRead / p.totalBytes.Value * 100;
+                        double mbRead = p.bytesRead / (1024.0 * 1024.0);
+                        double mbTotal = p.totalBytes.Value / (1024.0 * 1024.0);
+                        SetUpdateStatus($"Descargando v{result.latestVersion} ({percent:F0}% - {mbRead:F1}/{mbTotal:F1} MB)...");
+                    }
+                    else
+                    {
+                        double mbRead = p.bytesRead / (1024.0 * 1024.0);
+                        SetUpdateStatus($"Descargando v{result.latestVersion} ({mbRead:F1} MB)...");
+                    }
+                });
+
+                SetUpdateStatus($"Descargando v{result.latestVersion}...");
+                await UpdateService.DownloadFileAsync(result.downloadUrl, installerPath, progress);
+
+                SetUpdateStatus("Instalador descargado. Abriendo instalador...");
+                UpdateService.LaunchInstaller(installerPath);
+                SetUpdateStatus("Instalador iniciado. Sigue los pasos para actualizar.");
             }
             else if (result.status == UpdateStatus.Outdated)
             {
@@ -243,7 +267,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            SetUpdateStatus($"No se pudo abrir la actualización: {ex.Message}");
+            SetUpdateStatus($"No se pudo actualizar: {ex.Message}");
         }
         finally
         {

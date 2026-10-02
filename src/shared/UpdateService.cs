@@ -1,8 +1,10 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace NubeZero.Shared
@@ -84,16 +86,74 @@ namespace NubeZero.Shared
             }
         }
 
-        public static async Task DownloadFileAsync(string downloadUrl, string destinationPath)
+        public static async Task DownloadFileAsync(
+            string downloadUrl,
+            string destinationPath,
+            IProgress<(long bytesRead, long? totalBytes)>? progress = null,
+            CancellationToken cancellationToken = default)
         {
-            using (var response = await DownloadClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead))
+            using (var response = await DownloadClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken))
             {
                 response.EnsureSuccessStatusCode();
+
+                long? totalBytes = response.Content.Headers.ContentLength;
+
                 using (var source = await response.Content.ReadAsStreamAsync())
                 using (var destination = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
                 {
-                    await source.CopyToAsync(destination, 81920);
+                    byte[] buffer = new byte[81920];
+                    long totalRead = 0;
+                    int bytesRead;
+
+                    while ((bytesRead = await source.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
+                    {
+                        await destination.WriteAsync(buffer, 0, bytesRead, cancellationToken);
+                        totalRead += bytesRead;
+                        progress?.Report((totalRead, totalBytes));
+                    }
                 }
+            }
+        }
+
+        public static void LaunchInstaller(string installerPath)
+        {
+            if (string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath))
+                throw new FileNotFoundException("El instalador no fue encontrado.", installerPath);
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                Process.Start(new ProcessStartInfo(installerPath)
+                {
+                    UseShellExecute = true
+                });
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                Process.Start(new ProcessStartInfo("open", $"\"{installerPath}\"")
+                {
+                    UseShellExecute = false
+                });
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                try
+                {
+                    using var chmod = Process.Start("chmod", $"+x \"{installerPath}\"");
+                    chmod?.WaitForExit();
+                }
+                catch
+                {
+                    // Ignorar si chmod no se ejecuta
+                }
+
+                Process.Start(new ProcessStartInfo(installerPath)
+                {
+                    UseShellExecute = true
+                });
+            }
+            else
+            {
+                throw new PlatformNotSupportedException("No se puede iniciar el instalador en esta plataforma.");
             }
         }
 

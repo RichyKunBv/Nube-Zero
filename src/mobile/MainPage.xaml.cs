@@ -208,7 +208,24 @@ public partial class MainPage : ContentPage
 
             SetUpdateStatus($"Descargando v{result.latestVersion}...");
             string apkPath = Path.Combine(FileSystem.CacheDirectory, "NubeZero-update.apk");
-            await UpdateService.DownloadFileAsync(result.downloadUrl, apkPath);
+
+            var progress = new Progress<(long bytesRead, long? totalBytes)>(p =>
+            {
+                if (p.totalBytes.HasValue && p.totalBytes.Value > 0)
+                {
+                    double percent = (double)p.bytesRead / p.totalBytes.Value * 100;
+                    double mbRead = p.bytesRead / (1024.0 * 1024.0);
+                    double mbTotal = p.totalBytes.Value / (1024.0 * 1024.0);
+                    SetUpdateStatus($"Descargando v{result.latestVersion} ({percent:F0}% - {mbRead:F1}/{mbTotal:F1} MB)...");
+                }
+                else
+                {
+                    double mbRead = p.bytesRead / (1024.0 * 1024.0);
+                    SetUpdateStatus($"Descargando v{result.latestVersion} ({mbRead:F1} MB)...");
+                }
+            });
+
+            await UpdateService.DownloadFileAsync(result.downloadUrl, apkPath, progress);
 
             SetUpdateStatus("Abriendo el instalador de Android...");
             await Launcher.Default.OpenAsync(new OpenFileRequest(
