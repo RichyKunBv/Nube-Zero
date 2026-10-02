@@ -713,12 +713,25 @@ public partial class MainWindow : Window
         {
             string fileName = Path.GetFileName(localPath);
             ShowTransfer($"Subiendo {fileName}...");
-            
-            using var fs = new FileStream(localPath, FileMode.Open, FileAccess.Read);
-            using var content = new ProgressStreamContent(fs, UpdateTransferProgress);
-            
+
+            var fi = new FileInfo(localPath);
+            long fileLength = fi.Length;
+
+            using var fs = new FileStream(localPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, true);
+            using var content = new ProgressStreamContent(fs, UpdateTransferProgress, fileLength);
+
             string relativePath = Uri.EscapeDataString(GetRemotePath(fileName));
-            using var response = await _httpClient.PostAsync($"/api/upload?path={relativePath}", content);
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/upload?path={relativePath}")
+            {
+                Content = content
+            };
+
+            if (fileLength >= 0)
+            {
+                request.Headers.TransferEncodingChunked = false;
+            }
+
+            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
             response.EnsureSuccessStatusCode();
             TxtStatus.Text = "Subida exitosa";
         }

@@ -137,7 +137,16 @@ public partial class MainPage : ContentPage
         
         string cleanIp = _serverIp.Replace("http://", "").Replace("https://", "").Replace(":8080", "").TrimEnd('/');
         string baseAddress = $"http://{cleanIp}:8080";
-        _httpClient = new HttpClient
+
+        var handler = new SocketsHttpHandler
+        {
+            PooledConnectionLifetime = TimeSpan.FromMinutes(15),
+            ResponseHeaderReadTimeout = TimeSpan.FromHours(2),
+            ConnectTimeout = TimeSpan.FromSeconds(30),
+            EnableMultipleHttp2Connections = true
+        };
+
+        _httpClient = new HttpClient(handler)
         {
             BaseAddress = new Uri(baseAddress),
             Timeout = TimeSpan.FromHours(2)
@@ -876,17 +885,47 @@ public partial class MainPage : ContentPage
 
     public async Task UploadFileAsync(string localPath, string fileName)
     {
+        bool isCachedCopy = false;
         try
         {
             ShowTransfer($"Subiendo {fileName}...");
-            
-            using var fs = new FileStream(localPath, FileMode.Open, FileAccess.Read);
-            using var content = new ProgressStreamContent(fs, UpdateTransferProgress);
-            
-            string relativePath = Uri.EscapeDataString(GetRemotePath(fileName));
-            using var response = await _httpClient.PostAsync($"/api/upload?path={relativePath}", content);
-            response.EnsureSuccessStatusCode();
-            
+
+            Stream fs;
+            long fileLength = -1;
+
+            if (File.Exists(localPath))
+            {
+                var fi = new FileInfo(localPath);
+                fileLength = fi.Length;
+                fs = new FileStream(localPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, true);
+                if (localPath.StartsWith(FileSystem.CacheDirectory, StringComparison.OrdinalIgnoreCase))
+                {
+                    isCachedCopy = true;
+                }
+            }
+            else
+            {
+                throw new FileNotFoundException("El archivo a subir no existe o no se puede leer.", localPath);
+            }
+
+            using (fs)
+            using (var content = new ProgressStreamContent(fs, UpdateTransferProgress, fileLength))
+            {
+                string relativePath = Uri.EscapeDataString(GetRemotePath(fileName));
+                using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/upload?path={relativePath}")
+                {
+                    Content = content
+                };
+
+                if (fileLength >= 0)
+                {
+                    request.Headers.TransferEncodingChunked = false;
+                }
+
+                using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+                response.EnsureSuccessStatusCode();
+            }
+
             TxtStatus.Text = "Subida exitosa";
             await LoadFilesAsync();
         }
@@ -897,6 +936,10 @@ public partial class MainPage : ContentPage
         finally
         {
             HideTransfer();
+            if (isCachedCopy && File.Exists(localPath))
+            {
+                try { File.Delete(localPath); } catch { }
+            }
         }
     }
 
