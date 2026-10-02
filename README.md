@@ -2,7 +2,7 @@
 
 # Nube-Zero ☁️
 
-[![Versión](https://img.shields.io/badge/Versión-v0.7.3-blue.svg)](https://github.com/RichyKunBv/Nube-Zero)
+[![Versión](https://img.shields.io/badge/Versión-v0.7.4-blue.svg)](https://github.com/RichyKunBv/Nube-Zero)
 [![Status](https://img.shields.io/badge/Estado-Desarrollo-yellow.svg)](https://github.com/RichyKunBv/Nube-Zero)
 [![Licencia](https://img.shields.io/badge/Licencia-Apache_2.0-orange.svg)](https://github.com/RichyKunBv/Nube-Zero/blob/main/LICENSE)
 ---
@@ -21,8 +21,8 @@
 - 📥 **Descargas Android más fiables (v0.7.1)**: selector nativo para guardar directamente en Descargas u otra ubicación, sin depender del menú Compartir del fabricante.
 - 🔄 **Actualización desde el cliente (v0.7.1)**: comprueba GitHub y abre el instalador de la plataforma; en Android descarga el APK y solicita confirmación al instalador del sistema.
 - 📏 **Tamaños de archivo claros**: la interfaz etiqueta KiB/MiB/GiB para indicar explícitamente que convierte usando base 1024.
-- 📊 **Transferencias más claras y seguras (v0.7.3)**: progreso de subida/descarga, cola FIFO de una escritura activa, sesiones extendidas durante operaciones largas y publicación de archivos solo después de verificar su recepción completa.
-- 🗂️ **Navegación y vistas previas (v0.7.3)**: navegación por carpetas, iconos por tipo y miniaturas de imágenes generadas y cacheadas en los clientes. Los primeros fotogramas de video se generan localmente para clips de hasta 32 MiB; en escritorio se requiere `ffmpeg` disponible en el sistema.
+- 📊 **Transferencias más claras y seguras (v0.7.4)**: progreso de subida/descarga, cola FIFO compartida para limitar a una transferencia activa, sesiones extendidas durante operaciones largas y publicación de archivos solo después de verificar su recepción completa.
+- 🗂️ **Navegación y vistas previas (v0.7.4)**: navegación por carpetas, iconos por tipo y miniaturas de imágenes generadas y cacheadas en los clientes. Los primeros fotogramas de video se generan localmente para clips de hasta 32 MiB; en escritorio se requiere `ffmpeg` disponible en el sistema.
 - 🔍 **Descubrimiento Automático Silencioso (v0.6.0)**: Encuentra tus servidores Nube-Zero en la red local bajo demanda con un solo clic (`🔍`). Funciona mediante un protocolo reactivo *Probe-Response* por UDP con clave de autenticación: **cero saturación de Wi-Fi, cero pings continuos y 0% de uso de CPU en reposo**.
 - 🏷️ **Soporte Multi-servidor y Nombres Personalizados**: Cada Raspberry Pi puede tener su propio nombre identificador (`--name "Mi Servidor"`), facilitando elegir entre múltiples servidores desde la pantalla de inicio de los clientes.
 - 👥 **Sistema de Roles y Usuarios Granular (v0.5.0)**:

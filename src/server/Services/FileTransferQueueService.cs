@@ -4,38 +4,38 @@ using System.Threading.Tasks;
 
 namespace NubeZero.Server.Services
 {
-    public sealed class UploadQueueFullException : Exception
+    public sealed class FileTransferQueueFullException : Exception
     {
-        public UploadQueueFullException() : base("La cola de subidas está llena.")
+        public FileTransferQueueFullException() : base("La cola de transferencias está llena.")
         {
         }
     }
 
-    public sealed class UploadQueueService
+    public sealed class FileTransferQueueService
     {
         private readonly object _sync = new object();
         private readonly Queue<QueueItem> _waiting = new Queue<QueueItem>();
-        private readonly int _maxWaitingUploads;
+        private readonly int _maxWaitingTransfers;
         private bool _workerRunning;
 
-        public UploadQueueService(int maxWaitingUploads = 3)
+        public FileTransferQueueService(int maxWaitingTransfers = 3)
         {
-            _maxWaitingUploads = maxWaitingUploads;
+            _maxWaitingTransfers = maxWaitingTransfers;
         }
 
-        public Task EnqueueAsync(Func<Task> upload)
+        public Task EnqueueAsync(Func<Task> transfer)
         {
             var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             bool startWorker = false;
 
             lock (_sync)
             {
-                if (_waiting.Count >= _maxWaitingUploads)
+                if (_waiting.Count >= _maxWaitingTransfers)
                 {
-                    throw new UploadQueueFullException();
+                    throw new FileTransferQueueFullException();
                 }
 
-                _waiting.Enqueue(new QueueItem(upload, completion));
+                _waiting.Enqueue(new QueueItem(transfer, completion));
                 if (!_workerRunning)
                 {
                     _workerRunning = true;
@@ -69,7 +69,7 @@ namespace NubeZero.Server.Services
 
                 try
                 {
-                    await item.Upload();
+                    await item.Transfer();
                     item.Completion.TrySetResult(true);
                 }
                 catch (Exception ex)
@@ -81,13 +81,13 @@ namespace NubeZero.Server.Services
 
         private sealed class QueueItem
         {
-            public QueueItem(Func<Task> upload, TaskCompletionSource<bool> completion)
+            public QueueItem(Func<Task> transfer, TaskCompletionSource<bool> completion)
             {
-                Upload = upload;
+                Transfer = transfer;
                 Completion = completion;
             }
 
-            public Func<Task> Upload { get; }
+            public Func<Task> Transfer { get; }
             public TaskCompletionSource<bool> Completion { get; }
         }
     }

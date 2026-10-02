@@ -13,13 +13,13 @@ namespace NubeZero.Server.Controllers
     {
         private readonly StorageService _storageService;
         private readonly NubeZero.Server.Data.DatabaseContext _dbContext;
-        private readonly UploadQueueService _uploadQueue;
+        private readonly FileTransferQueueService _fileTransferQueue;
         
-        public FileController(StorageService storageService, NubeZero.Server.Data.DatabaseContext dbContext, UploadQueueService uploadQueue)
+        public FileController(StorageService storageService, NubeZero.Server.Data.DatabaseContext dbContext, FileTransferQueueService fileTransferQueue)
         {
             _storageService = storageService;
             _dbContext = dbContext;
-            _uploadQueue = uploadQueue;
+            _fileTransferQueue = fileTransferQueue;
         }
 
         public async Task HandleListDirectoryAsync(HttpListenerContext context, string relativePath)
@@ -89,6 +89,29 @@ namespace NubeZero.Server.Controllers
             var response = context.Response;
             try
             {
+                await _fileTransferQueue.EnqueueAsync(() => HandleDownloadCoreAsync(context, relativePath));
+            }
+            catch (FileTransferQueueFullException)
+            {
+                response.AddHeader("Retry-After", "15");
+                await WriteErrorAsync(response, 503, "La cola de transferencias está llena. Inténtelo de nuevo en unos segundos.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error en cola de descarga: {ex.Message}");
+                response.Abort();
+            }
+            finally
+            {
+                response.Close();
+            }
+        }
+
+        private async Task HandleDownloadCoreAsync(HttpListenerContext context, string relativePath)
+        {
+            var response = context.Response;
+            try
+            {
                 string safePath = _storageService.GetSafePath(relativePath);
 
                 if (!File.Exists(safePath))
@@ -100,11 +123,8 @@ namespace NubeZero.Server.Controllers
                 var fileInfo = new FileInfo(safePath);
                 response.ContentType = "application/octet-stream";
                 response.ContentLength64 = fileInfo.Length;
-                
-                // Forzar que el navegador descargue en lugar de mostrar (útil para pruebas)
                 response.AddHeader("Content-Disposition", $"attachment; filename=\"{fileInfo.Name}\"");
 
-                // Stream super eficiente con buffer pequeño adaptado a HW bajo
                 using (var fs = new FileStream(safePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, true))
                 {
                     await fs.CopyToAsync(response.OutputStream, 81920);
@@ -130,17 +150,17 @@ namespace NubeZero.Server.Controllers
             var response = context.Response;
             try
             {
-            _dbContext.ExtendSessionForLongOperation(sessionToken);
-                await _uploadQueue.EnqueueAsync(() => HandleUploadCoreAsync(context, relativePath, username));
+                _dbContext.ExtendSessionForLongOperation(sessionToken);
+                await _fileTransferQueue.EnqueueAsync(() => HandleUploadCoreAsync(context, relativePath, username));
             }
-            catch (UploadQueueFullException)
+            catch (FileTransferQueueFullException)
             {
                 response.AddHeader("Retry-After", "15");
-                await WriteErrorAsync(response, 503, "La cola de subidas está llena. Inténtelo de nuevo en unos segundos.");
+                await WriteErrorAsync(response, 503, "La cola de transferencias está llena. Inténtelo de nuevo en unos segundos.");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error en cola de subida: {ex.Message}");
+                Console.WriteLine($"Error en cola de transferencia: {ex.Message}");
                 context.Response.Abort();
             }
             finally

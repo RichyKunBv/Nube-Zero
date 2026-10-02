@@ -17,7 +17,7 @@ namespace NubeZero.Server
         private static AuthController _authController;
         private static AuthInterceptor _authInterceptor;
         private static DiscoveryService _discoveryService;
-        private static UploadQueueService _uploadQueueService;
+        private static FileTransferQueueService _fileTransferQueueService;
         private static NotesController _notesController;
 
         static async Task Main(string[] args)
@@ -58,8 +58,8 @@ namespace NubeZero.Server
             _dbContext = new DatabaseContext(storagePath);
             _authController = new AuthController(_dbContext);
             _authInterceptor = new AuthInterceptor(_dbContext);
-            _uploadQueueService = new UploadQueueService();
-            _fileController = new FileController(_storageService, _dbContext, _uploadQueueService);
+            _fileTransferQueueService = new FileTransferQueueService();
+            _fileController = new FileController(_storageService, _dbContext, _fileTransferQueueService);
             _notesController = new NotesController(_dbContext);
             _discoveryService = new DiscoveryService(port, serverName, discoveryPort, discoveryKey);
             _discoveryService.Start();
