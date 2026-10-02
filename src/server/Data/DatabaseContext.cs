@@ -37,11 +37,20 @@ namespace NubeZero.Server.Data
         public long Size { get; set; }
     }
 
+    public class NoteItem
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString("N");
+        public string Contenido { get; set; } = "";
+        public string CreadoPor { get; set; } = "";
+        public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
+    }
+
     public class DatabaseState
     {
         public List<User> Usuarios { get; set; } = new List<User>();
         public List<Session> Sesiones { get; set; } = new List<Session>();
         public List<FileMeta> FileMetadata { get; set; } = new List<FileMeta>();
+        public List<NoteItem> Notas { get; set; } = new List<NoteItem>();
         public long NextUserId { get; set; } = 1;
     }
 
@@ -88,6 +97,11 @@ namespace NubeZero.Server.Data
             {
                 _state = new DatabaseState();
                 Save();
+            }
+
+            if (_state.Notas == null)
+            {
+                _state.Notas = new List<NoteItem>();
             }
 
             if (_state.Usuarios != null && _state.Usuarios.Count > 0)
@@ -450,6 +464,51 @@ namespace NubeZero.Server.Data
                     meta.FilePath = newPath;
                     Save();
                 }
+            }
+        }
+
+        public List<NoteItem> GetNotas()
+        {
+            lock (_lock)
+            {
+                if (_state.Notas == null) _state.Notas = new List<NoteItem>();
+                return new List<NoteItem>(_state.Notas);
+            }
+        }
+
+        public NoteItem AddNota(string contenido, string username)
+        {
+            lock (_lock)
+            {
+                if (_state.Notas == null) _state.Notas = new List<NoteItem>();
+                var nota = new NoteItem
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    Contenido = contenido,
+                    CreadoPor = username,
+                    FechaCreacion = DateTime.UtcNow
+                };
+                _state.Notas.Add(nota);
+                Save();
+                return nota;
+            }
+        }
+
+        public bool DeleteNota(string id, string username, string role)
+        {
+            lock (_lock)
+            {
+                if (_state.Notas == null) return false;
+                var nota = _state.Notas.FirstOrDefault(n => n.Id == id);
+                if (nota == null) return false;
+
+                if (role == "Admin" || string.Equals(nota.CreadoPor, username, StringComparison.OrdinalIgnoreCase))
+                {
+                    _state.Notas.Remove(nota);
+                    Save();
+                    return true;
+                }
+                return false;
             }
         }
 

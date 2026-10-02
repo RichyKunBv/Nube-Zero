@@ -15,6 +15,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Data.Converters;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
@@ -39,6 +40,7 @@ public partial class MainWindow : Window
     private readonly ConcurrentDictionary<string, bool> _thumbnailRequests = new ConcurrentDictionary<string, bool>();
     private readonly SemaphoreSlim _thumbnailSlots = new SemaphoreSlim(2, 2);
     private bool _hasSavedMacCredentials;
+    private bool _isNotesTabActive = false;
 
     public MainWindow()
     {
@@ -296,7 +298,183 @@ public partial class MainWindow : Window
 
     private async void BtnRefresh_Click(object? sender, RoutedEventArgs e)
     {
+        if (_isNotesTabActive)
+        {
+            await LoadNotesAsync();
+        }
+        else
+        {
+            await LoadFilesAsync();
+        }
+    }
+
+    private async void BtnTabFiles_Click(object? sender, RoutedEventArgs e)
+    {
+        _isNotesTabActive = false;
+        BtnTabFiles.Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#00D2FF"));
+        BtnTabFiles.Foreground = Avalonia.Media.Brushes.White;
+        BtnTabFiles.FontWeight = Avalonia.Media.FontWeight.Bold;
+
+        BtnTabNotes.Background = Avalonia.Media.Brushes.Transparent;
+        BtnTabNotes.Foreground = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#A0A0A0"));
+        BtnTabNotes.FontWeight = Avalonia.Media.FontWeight.SemiBold;
+
+        FilesContainer.IsVisible = true;
+        NotesContainer.IsVisible = false;
+        BtnUploadFab.IsVisible = (_role != "Visitante");
+
         await LoadFilesAsync();
+    }
+
+    private async void BtnTabNotes_Click(object? sender, RoutedEventArgs e)
+    {
+        _isNotesTabActive = true;
+        BtnTabNotes.Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#00D2FF"));
+        BtnTabNotes.Foreground = Avalonia.Media.Brushes.White;
+        BtnTabNotes.FontWeight = Avalonia.Media.FontWeight.Bold;
+
+        BtnTabFiles.Background = Avalonia.Media.Brushes.Transparent;
+        BtnTabFiles.Foreground = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#A0A0A0"));
+        BtnTabFiles.FontWeight = Avalonia.Media.FontWeight.SemiBold;
+
+        FilesContainer.IsVisible = false;
+        NotesContainer.IsVisible = true;
+        BtnUploadFab.IsVisible = false;
+
+        await LoadNotesAsync();
+    }
+
+    private async System.Threading.Tasks.Task LoadNotesAsync()
+    {
+        try
+        {
+            TxtStatus.Text = "Cargando notas...";
+            var response = await _httpClient.GetAsync("/api/notes");
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                MainView.IsVisible = false;
+                LoginView.IsVisible = true;
+                ShowLoginError("Sesión expirada. Vuelve a iniciar sesión.");
+                return;
+            }
+
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var notes = JsonSerializer.Deserialize<List<NotaDTO>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new List<NotaDTO>();
+                
+                LstNotes.ItemsSource = notes;
+                TxtNoNotes.IsVisible = (notes.Count == 0);
+                TxtStatus.Text = $"Conectado ({notes.Count} notas)";
+
+                Dispatcher.UIThread.Post(() =>
+                {
+                    ScrollNotes.ScrollToEnd();
+                }, DispatcherPriority.Background);
+            }
+            else
+            {
+                TxtStatus.Text = "Error al sincronizar notas.";
+            }
+        }
+        catch (Exception ex)
+        {
+            TxtStatus.Text = $"Error: {ex.Message}";
+        }
+    }
+
+    private async void BtnSendNote_Click(object? sender, RoutedEventArgs e)
+    {
+        await SendNoteAsync();
+    }
+
+    private async void TxtNoteInput_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        {
+            e.Handled = true;
+            await SendNoteAsync();
+        }
+    }
+
+    private async System.Threading.Tasks.Task SendNoteAsync()
+    {
+        string text = TxtNoteInput.Text?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(text)) return;
+
+        BtnSendNote.IsEnabled = false;
+        try
+        {
+            var payload = new { contenido = text };
+            var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync("/api/notes", content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                TxtNoteInput.Text = string.Empty;
+                await LoadNotesAsync();
+            }
+            else
+            {
+                TxtStatus.Text = "No se pudo guardar la nota.";
+            }
+        }
+        catch (Exception ex)
+        {
+            TxtStatus.Text = $"Error al enviar nota: {ex.Message}";
+        }
+        finally
+        {
+            BtnSendNote.IsEnabled = true;
+        }
+    }
+
+    private async void BtnCopyNote_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is NotaDTO nota)
+        {
+            try
+            {
+                var topLevel = TopLevel.GetTopLevel(this);
+                if (topLevel?.Clipboard != null)
+                {
+                    await topLevel.Clipboard.SetTextAsync(nota.Contenido);
+                    string originalContent = btn.Content?.ToString() ?? "📋 Copiar";
+                    btn.Content = "¡Copiado! ✅";
+                    _ = System.Threading.Tasks.Task.Delay(1500).ContinueWith(_ =>
+                    {
+                        Dispatcher.UIThread.Post(() => btn.Content = originalContent);
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                TxtStatus.Text = $"No se pudo copiar: {ex.Message}";
+            }
+        }
+    }
+
+    private async void BtnDeleteNote_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.DataContext is NotaDTO nota)
+        {
+            try
+            {
+                var response = await _httpClient.DeleteAsync($"/api/notes?id={Uri.EscapeDataString(nota.Id)}");
+                if (response.IsSuccessStatusCode)
+                {
+                    await LoadNotesAsync();
+                }
+                else
+                {
+                    TxtStatus.Text = "No se pudo eliminar la nota.";
+                }
+            }
+            catch (Exception ex)
+            {
+                TxtStatus.Text = $"Error al eliminar: {ex.Message}";
+            }
+        }
     }
 
     private async System.Threading.Tasks.Task LoadFilesAsync()

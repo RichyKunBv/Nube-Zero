@@ -61,6 +61,15 @@
                 <Grid ColumnDefinitions="*, Auto">
                     <StackPanel Orientation="Horizontal" Spacing="15" VerticalAlignment="Center">
                         <TextBlock Text="☁️ Nube-Zero" FontSize="24" FontWeight="Black" Foreground="White" />
+                        
+                        <!-- SELECTOR DE PESTAÑAS (ARCHIVOS / NOTAS) -->
+                        <Border Background="#18FFFFFF" CornerRadius="8" Padding="3">
+                            <StackPanel Orientation="Horizontal" Spacing="3">
+                                <Button Name="BtnTabFiles" Content="📁 Archivos" Click="BtnTabFiles_Click" Background="#00D2FF" Foreground="White" FontWeight="Bold" CornerRadius="6" Padding="12,6"/>
+                                <Button Name="BtnTabNotes" Content="💬 Notas" Click="BtnTabNotes_Click" Background="Transparent" Foreground="#A0A0A0" FontWeight="SemiBold" CornerRadius="6" Padding="12,6"/>
+                            </StackPanel>
+                        </Border>
+
                         <TextBlock Name="TxtUserInfo" Text="" VerticalAlignment="Center" Foreground="#00D2FF" FontSize="13" FontWeight="SemiBold"/>
                         <TextBlock Name="TxtStatus" Text="Conectado" VerticalAlignment="Center" Foreground="#A0A0A0" FontSize="13"/>
                     </StackPanel>
@@ -74,8 +83,8 @@
                 </Grid>
             </Border>
 
-            <!-- ZONA DRAG & DROP Y LISTADO -->
-            <Border Grid.Row="1" Margin="20,10" Background="#10FFFFFF" CornerRadius="12" BorderBrush="#20FFFFFF" BorderThickness="1">
+            <!-- ZONA DRAG & DROP Y LISTADO DE ARCHIVOS -->
+            <Border Name="FilesContainer" Grid.Row="1" Margin="20,10" Background="#10FFFFFF" CornerRadius="12" BorderBrush="#20FFFFFF" BorderThickness="1" IsVisible="True">
                 <Grid RowDefinitions="Auto, *">
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" Margin="12,8">
                         <Button Name="BtnParentFolder" Content="↑" ToolTip.Tip="Carpeta anterior" Click="BtnParentFolder_Click" IsVisible="False"/>
@@ -112,6 +121,64 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
+                </Grid>
+            </Border>
+
+            <!-- ZONA NOTAS / PORTAPAPELES EN LA NUBE (FEED TIPO CHAT) -->
+            <Border Name="NotesContainer" Grid.Row="1" Margin="20,10" Background="#10FFFFFF" CornerRadius="12" BorderBrush="#20FFFFFF" BorderThickness="1" IsVisible="False">
+                <Grid RowDefinitions="*, Auto">
+                    <!-- FEED DE NOTAS -->
+                    <ScrollViewer Grid.Row="0" Name="ScrollNotes" VerticalScrollBarVisibility="Auto" Margin="10">
+                        <StackPanel Spacing="8">
+                            <TextBlock Name="TxtNoNotes" Text="No hay notas o enlaces guardados aún. Escribe el primero abajo ✍️" 
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" 
+                                       Margin="0,80,0,0" FontSize="15" Foreground="#60FFFFFF" IsVisible="False"/>
+                            <ItemsControl Name="LstNotes">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="shared:NotaDTO">
+                                        <Border Margin="0,4" Padding="14,12" Background="#18FFFFFF" CornerRadius="10" BorderBrush="#25FFFFFF" BorderThickness="1">
+                                            <Grid ColumnDefinitions="*, Auto">
+                                                <StackPanel Grid.Column="0" Spacing="6">
+                                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                                        <TextBlock Text="{Binding CreadoPor}" Foreground="#00D2FF" FontWeight="Bold" FontSize="13"/>
+                                                        <TextBlock Text="•" Foreground="#50FFFFFF" FontSize="11" VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding FechaCreacion, StringFormat='dd/MM/yyyy HH:mm'}" Foreground="#80FFFFFF" FontSize="11" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                    <SelectableTextBlock Text="{Binding Contenido}" TextWrapping="Wrap" Foreground="White" FontSize="14" LineHeight="20"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Top" Margin="12,0,0,0">
+                                                    <Button Content="📋 Copiar" Click="BtnCopyNote_Click" 
+                                                            Background="#30FFFFFF" Foreground="White" CornerRadius="6" FontSize="12" Padding="10,6"/>
+                                                    <Button Content="🗑️" Click="BtnDeleteNote_Click" 
+                                                            Background="Transparent" Foreground="#FF5555" CornerRadius="6" FontSize="12" Padding="8,6" 
+                                                            ToolTip.Tip="Eliminar nota"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- BARRA INFERIOR DE ENTRADA -->
+                    <Border Grid.Row="1" Background="#1AFFFFFF" BorderBrush="#25FFFFFF" BorderThickness="0,1,0,0" CornerRadius="0,0,12,12" Padding="12">
+                        <Grid ColumnDefinitions="*, Auto">
+                            <TextBox Grid.Column="0" Name="TxtNoteInput" 
+                                     PlaceholderText="Escribe una nota, texto, enlace o recordatorio... (Enter para enviar, Shift+Enter para salto de línea)" 
+                                     AcceptsReturn="True" 
+                                     MaxHeight="120" 
+                                     TextWrapping="Wrap" 
+                                     Background="#15FFFFFF" 
+                                     Foreground="White" 
+                                     CornerRadius="8" 
+                                     Padding="12,10"
+                                     KeyDown="TxtNoteInput_KeyDown"/>
+                            <Button Grid.Column="1" Name="BtnSendNote" Content="Guardar ↵" Click="BtnSendNote_Click" 
+                                    Background="#00D2FF" Foreground="White" FontWeight="Bold" CornerRadius="8" 
+                                    Padding="18,10" Margin="10,0,0,0" VerticalAlignment="Stretch" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+                        </Grid>
+                    </Border>
                 </Grid>
             </Border>
 

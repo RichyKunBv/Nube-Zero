@@ -22,6 +22,7 @@ public partial class MainPage : ContentPage
     private readonly ConcurrentDictionary<string, byte> _thumbnailRequests = new ConcurrentDictionary<string, byte>();
     private readonly SemaphoreSlim _thumbnailSlots = new SemaphoreSlim(2, 2);
     private List<DiscoveryResponse> _discoveredServers = new List<DiscoveryResponse>();
+    private bool _isNotesTabActive = false;
 
     public MainPage()
     {
@@ -317,7 +318,171 @@ public partial class MainPage : ContentPage
 
     private void BtnRefresh_Clicked(object sender, EventArgs e)
     {
+        if (_isNotesTabActive)
+        {
+            _ = LoadNotesAsync();
+        }
+        else
+        {
+            _ = LoadFilesAsync();
+        }
+    }
+
+    private void BtnTabFiles_Clicked(object sender, EventArgs e)
+    {
+        _isNotesTabActive = false;
+        BtnTabFiles.BackgroundColor = Color.FromArgb("#00D2FF");
+        BtnTabFiles.TextColor = Colors.White;
+
+        BtnTabNotes.BackgroundColor = Colors.Transparent;
+        BtnTabNotes.TextColor = Color.FromArgb("#A0A0A0");
+
+        FilesContainer.IsVisible = true;
+        NotesContainer.IsVisible = false;
+
         _ = LoadFilesAsync();
+    }
+
+    private void BtnTabNotes_Clicked(object sender, EventArgs e)
+    {
+        _isNotesTabActive = true;
+        BtnTabNotes.BackgroundColor = Color.FromArgb("#00D2FF");
+        BtnTabNotes.TextColor = Colors.White;
+
+        BtnTabFiles.BackgroundColor = Colors.Transparent;
+        BtnTabFiles.TextColor = Color.FromArgb("#A0A0A0");
+
+        FilesContainer.IsVisible = false;
+        NotesContainer.IsVisible = true;
+
+        _ = LoadNotesAsync();
+    }
+
+    private void NotesRefreshView_Refreshing(object sender, EventArgs e)
+    {
+        _ = LoadNotesAsync();
+    }
+
+    private async Task LoadNotesAsync()
+    {
+        try
+        {
+            TxtStatus.Text = "Cargando notas...";
+            var response = await _httpClient.GetAsync("/api/notes");
+
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                MainView.IsVisible = false;
+                LoginView.IsVisible = true;
+                ShowLoginError("Sesión expirada. Ingresa de nuevo.");
+                SecureStorage.Default.Remove("auth_token");
+                NotesRefreshView.IsRefreshing = false;
+                return;
+            }
+
+            response.EnsureSuccessStatusCode();
+            var json = await response.Content.ReadAsStringAsync();
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var notes = JsonSerializer.Deserialize<List<NotaDTO>>(json, options) ?? new List<NotaDTO>();
+
+            LstNotes.ItemsSource = notes;
+            TxtStatus.Text = $"Conectado ({notes.Count} notas)";
+
+            if (notes.Count > 0)
+            {
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    LstNotes.ScrollTo(notes.Count - 1, position: ScrollToPosition.End, animate: true);
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            TxtStatus.Text = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            NotesRefreshView.IsRefreshing = false;
+        }
+    }
+
+    private async void BtnSendNote_Clicked(object sender, EventArgs e)
+    {
+        string text = TxtNoteInput.Text?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(text)) return;
+
+        BtnSendNote.IsEnabled = false;
+        try
+        {
+            var payload = new { contenido = text };
+            var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync("/api/notes", content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                TxtNoteInput.Text = string.Empty;
+                await LoadNotesAsync();
+            }
+            else
+            {
+                await DisplayAlert("Error", "No se pudo guardar la nota.", "OK");
+            }
+        }
+        catch (Exception ex)
+        {
+            await DisplayAlert("Error", $"No se pudo enviar: {ex.Message}", "OK");
+        }
+        finally
+        {
+            BtnSendNote.IsEnabled = true;
+        }
+    }
+
+    private async void BtnCopyNote_Clicked(object sender, EventArgs e)
+    {
+        if (sender is Button btn && btn.CommandParameter is NotaDTO nota)
+        {
+            try
+            {
+                await Clipboard.Default.SetTextAsync(nota.Contenido);
+                string originalText = btn.Text;
+                btn.Text = "✓";
+                _ = Task.Delay(1500).ContinueWith(_ =>
+                {
+                    MainThread.BeginInvokeOnMainThread(() => btn.Text = originalText);
+                });
+            }
+            catch (Exception ex)
+            {
+                await DisplayAlert("Error", $"No se pudo copiar: {ex.Message}", "OK");
+            }
+        }
+    }
+
+    private async void BtnDeleteNote_Clicked(object sender, EventArgs e)
+    {
+        if (sender is Button btn && btn.CommandParameter is NotaDTO nota)
+        {
+            bool confirm = await DisplayAlert("Eliminar nota", "¿Deseas eliminar esta nota?", "Eliminar", "Cancelar");
+            if (!confirm) return;
+
+            try
+            {
+                var response = await _httpClient.DeleteAsync($"/api/notes?id={Uri.EscapeDataString(nota.Id)}");
+                if (response.IsSuccessStatusCode)
+                {
+                    await LoadNotesAsync();
+                }
+                else
+                {
+                    await DisplayAlert("Error", "No se pudo eliminar la nota.", "OK");
+                }
+            }
+            catch (Exception ex)
+            {
+                await DisplayAlert("Error", $"Error al eliminar: {ex.Message}", "OK");
+            }
+        }
     }
 
     private void RefreshView_Refreshing(object sender, EventArgs e)

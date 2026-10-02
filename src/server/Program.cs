@@ -18,6 +18,7 @@ namespace NubeZero.Server
         private static AuthInterceptor _authInterceptor;
         private static DiscoveryService _discoveryService;
         private static UploadQueueService _uploadQueueService;
+        private static NotesController _notesController;
 
         static async Task Main(string[] args)
         {
@@ -59,6 +60,7 @@ namespace NubeZero.Server
             _authInterceptor = new AuthInterceptor(_dbContext);
             _uploadQueueService = new UploadQueueService();
             _fileController = new FileController(_storageService, _dbContext, _uploadQueueService);
+            _notesController = new NotesController(_dbContext);
             _discoveryService = new DiscoveryService(port, serverName, discoveryPort, discoveryKey);
             _discoveryService.Start();
             
@@ -168,6 +170,21 @@ namespace NubeZero.Server
                 else if (request.Url.AbsolutePath == "/api/users/password" && request.HttpMethod == "POST")
                 {
                     await _authController.HandleChangePasswordAsync(context, session.Username, session.Role);
+                    return;
+                }
+                else if (request.Url.AbsolutePath == "/api/notes" && request.HttpMethod == "GET")
+                {
+                    await _notesController.HandleGetNotesAsync(context);
+                    return;
+                }
+                else if (request.Url.AbsolutePath == "/api/notes" && request.HttpMethod == "POST")
+                {
+                    await _notesController.HandleAddNoteAsync(context, session.Username);
+                    return;
+                }
+                else if (request.Url.AbsolutePath == "/api/notes" && request.HttpMethod == "DELETE")
+                {
+                    await _notesController.HandleDeleteNoteAsync(context, session.Username, session.Role);
                     return;
                 }
 
