@@ -1,6 +1,6 @@
 # Nube-Zero ☁️
 
-[![Versión](https://img.shields.io/badge/Versión-v0.7.5-blue.svg)](https://github.com/RichyKunBv/Nube-Zero)
+[![Versión](https://img.shields.io/badge/Versión-v0.7.6-blue.svg)](https://github.com/RichyKunBv/Nube-Zero)
 [![Status](https://img.shields.io/badge/Estado-Desarrollo-yellow.svg)](https://github.com/RichyKunBv/Nube-Zero)
 [![Licencia](https://img.shields.io/badge/Licencia-Apache_2.0-orange.svg)](https://github.com/RichyKunBv/Nube-Zero/blob/main/LICENSE)
 ---
@@ -21,6 +21,7 @@
 - 📏 **Tamaños de archivo claros**: la interfaz etiqueta KiB/MiB/GiB para indicar explícitamente que convierte usando base 1024.
 - 📊 **Transferencias más claras y seguras (v0.7.4)**: progreso de subida/descarga, cola FIFO compartida para limitar a una transferencia activa, sesiones extendidas durante operaciones largas y publicación de archivos solo después de verificar su recepción completa.
 - 🔐 **Seguridad de transporte y archivos (v0.7.5)**: HTTPS obligatorio con certificado local fijado por huella SHA-256, cifrado autenticado en streaming desde los clientes y almacenamiento de archivos cifrados en el servidor. Las contraseñas usan PBKDF2-SHA256 con sal y las sesiones usan tokens aleatorios.
+- 🔁 **Conexión más sencilla (v0.7.6)**: los clientes recuerdan la URL del servidor y la huella SHA-256 verificada al cerrar la aplicación, para que no tengas que volver a introducirlas. Cerrar sesión elimina las credenciales y conserva esos datos de conexión. La contraseña solo se guarda si eliges recordarla y se almacena en el mecanismo seguro de la plataforma.
 - 🗂️ **Navegación y vistas previas (v0.7.4)**: navegación por carpetas, iconos por tipo y miniaturas de imágenes generadas y cacheadas en los clientes. Los primeros fotogramas de video se generan localmente para clips de hasta 32 MiB; en escritorio se requiere `ffmpeg` disponible en el sistema.
 - 🔍 **Descubrimiento Automático Silencioso (v0.6.0)**: Encuentra tus servidores Nube-Zero en la red local bajo demanda con un solo clic (`🔍`). Funciona mediante un protocolo reactivo *Probe-Response* por UDP con clave de autenticación: **cero saturación de Wi-Fi, cero pings continuos y 0% de uso de CPU en reposo**.
 - 🏷️ **Soporte Multi-servidor y Nombres Personalizados**: Cada Raspberry Pi puede tener su propio nombre identificador (`--name "Mi Servidor"`), facilitando elegir entre múltiples servidores desde la pantalla de inicio de los clientes.
@@ -65,6 +66,8 @@ sudo bash setup_server.sh
 El asistente solicitará un **nombre identificador** (por ejemplo, *PiZero-Sala*), el puerto HTTPS público y, durante una instalación nueva, una contraseña de administrador de al menos 12 caracteres. También generará una clave aleatoria de cifrado de 32 bytes y la mostrará una sola vez.
 
 En la primera conexión, introduce la huella SHA-256 que el instalador muestra al final y verifícala por SSH antes de confiar en ella. No aceptes una huella enviada únicamente por la propia conexión de red.
+
+Después de verificarla, los clientes recuerdan la URL y la huella en el dispositivo para las siguientes aperturas. Esta comodidad no sustituye la verificación inicial: si reinstalas la aplicación, cambias de dispositivo o borras sus datos, tendrás que introducir de nuevo la huella verificada.
 
 **La clave de cifrado es administrada por el servidor y se entrega a usuarios autenticados por HTTPS fijado** para que sus clientes cifren y descifren archivos localmente. Esto no es cifrado de extremo a extremo (E2E): el servidor administra la clave y podría leer los archivos. Protege y respalda la clave que el instalador muestra una sola vez; perderla o cambiarla hace irrecuperables los archivos. En el primer inicio de la versión nueva, el servidor migra automáticamente los archivos existentes a formato cifrado; mantén una copia de seguridad y espacio libre suficiente. Los clientes anteriores que no soporten HTTPS fijado y el formato nuevo no podrán conectarse ni leer los archivos.
 

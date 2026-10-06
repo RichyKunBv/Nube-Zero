@@ -91,19 +91,35 @@ public partial class MainPage : ContentPage
     {
         try
         {
-            var savedIp = await SecureStorage.Default.GetAsync("server_ip");
+            var savedIp = Preferences.Default.Get("server_ip", string.Empty);
+            var savedFingerprint = Preferences.Default.Get("server_fingerprint", string.Empty);
+            if (string.IsNullOrEmpty(savedIp))
+            {
+                savedIp = await SecureStorage.Default.GetAsync("server_ip") ?? string.Empty;
+                if (!string.IsNullOrEmpty(savedIp))
+                    Preferences.Default.Set("server_ip", savedIp);
+            }
+            if (string.IsNullOrEmpty(savedFingerprint))
+            {
+                savedFingerprint = await SecureStorage.Default.GetAsync("server_fingerprint") ?? string.Empty;
+                if (!string.IsNullOrEmpty(savedFingerprint))
+                    Preferences.Default.Set("server_fingerprint", savedFingerprint);
+            }
+
             var savedToken = await SecureStorage.Default.GetAsync("auth_token");
             var savedUser = await SecureStorage.Default.GetAsync("auth_user");
             var savedRole = await SecureStorage.Default.GetAsync("auth_role");
             var savedPassword = await SecureStorage.Default.GetAsync("auth_password");
-            var savedFingerprint = await SecureStorage.Default.GetAsync("server_fingerprint");
+            if (!string.IsNullOrEmpty(savedIp))
+                TxtServerIp.Text = savedIp;
+            if (!string.IsNullOrEmpty(savedUser))
+                TxtUser.Text = savedUser;
             if (!string.IsNullOrWhiteSpace(savedFingerprint))
                 TxtServerFingerprint.Text = savedFingerprint;
 
             if (!string.IsNullOrEmpty(savedIp) && !string.IsNullOrEmpty(savedUser) && !string.IsNullOrEmpty(savedPassword))
             {
                 _serverIp = savedIp;
-                TxtServerIp.Text = savedIp;
                 TxtUser.Text = savedUser;
                 TxtPassword.Text = savedPassword;
                 ChkRememberPassword.IsChecked = true;
@@ -117,7 +133,6 @@ public partial class MainPage : ContentPage
             _token = savedToken;
             _username = savedUser ?? "Usuario";
             _role = savedRole ?? "Estandar";
-            TxtServerIp.Text = savedIp;
             
             InitHttpClient();
             await LoadEncryptionKeyAsync();
@@ -125,14 +140,6 @@ public partial class MainPage : ContentPage
         }
         catch (Exception ex)
         {
-            try
-            {
-                SecureStorage.Default.RemoveAll();
-            }
-            catch
-            {
-            }
-
             ShowLoginError($"No se pudieron recuperar las credenciales guardadas: {ex.Message}");
         }
     }
@@ -189,7 +196,7 @@ public partial class MainPage : ContentPage
             return;
         }
         string user = TxtUser.Text?.Trim() ?? "";
-        string pass = TxtPassword.Text?.Trim() ?? "";
+        string pass = TxtPassword.Text ?? "";
 
         if (string.IsNullOrEmpty(_serverIp) || string.IsNullOrEmpty(user) || string.IsNullOrEmpty(pass))
         {
@@ -199,11 +206,21 @@ public partial class MainPage : ContentPage
 
         try
         {
+            Preferences.Default.Set("server_ip", _serverIp);
+            Preferences.Default.Set("server_fingerprint", TxtServerFingerprint.Text.Trim());
+            BtnLoginMobile.IsEnabled = false;
+            BtnLoginMobile.Text = "Conectando...";
+            ShowLoginError("Validando credenciales; en una Raspberry Pi Zero puede tardar un poco.");
             await AuthenticateAsync(user, pass);
         }
         catch (Exception ex)
         {
             ShowLoginError($"Error de red: {ex.Message}");
+        }
+        finally
+        {
+            BtnLoginMobile.IsEnabled = true;
+            BtnLoginMobile.Text = "Conectar";
         }
     }
 
@@ -299,11 +316,11 @@ public partial class MainPage : ContentPage
         InitHttpClient();
         var loginData = new { Username = user, Password = password };
         var content = new StringContent(JsonSerializer.Serialize(loginData), Encoding.UTF8, "application/json");
-        var response = await _httpClient.PostAsync("/api/login", content);
+        using var response = await _httpClient.PostAsync("/api/login", content);
 
         if (!response.IsSuccessStatusCode)
         {
-            ShowLoginError("Credenciales o IP incorrectos.");
+            ShowLoginError(await GetLoginFailureMessageAsync(response));
             return;
         }
 
@@ -318,8 +335,6 @@ public partial class MainPage : ContentPage
 
         try
         {
-            await SecureStorage.Default.SetAsync("server_ip", _serverIp);
-            await SecureStorage.Default.SetAsync("server_fingerprint", TxtServerFingerprint.Text?.Trim() ?? string.Empty);
             await SecureStorage.Default.SetAsync("auth_token", _token);
             await SecureStorage.Default.SetAsync("auth_user", _username);
             await SecureStorage.Default.SetAsync("auth_role", _role);
@@ -335,6 +350,27 @@ public partial class MainPage : ContentPage
         }
 
         await TryConnectAsync();
+    }
+
+    private static async Task<string> GetLoginFailureMessageAsync(HttpResponseMessage response)
+    {
+        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            return "El servidor rechazó el usuario o la contraseña (HTTP 401).";
+
+        string detail = string.Empty;
+        try
+        {
+            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            if (document.RootElement.TryGetProperty("error", out var error))
+                detail = error.GetString() ?? string.Empty;
+        }
+        catch (JsonException)
+        {
+        }
+
+        return string.IsNullOrWhiteSpace(detail)
+            ? $"El servidor respondió con HTTP {(int)response.StatusCode} ({response.ReasonPhrase})."
+            : $"El servidor respondió con HTTP {(int)response.StatusCode}: {detail}";
     }
 
     private async Task TryConnectAsync()
@@ -749,11 +785,9 @@ public partial class MainPage : ContentPage
     private void BtnLogout_Clicked(object sender, EventArgs e)
     {
         SecureStorage.Default.Remove("auth_token");
-        SecureStorage.Default.Remove("server_ip");
         SecureStorage.Default.Remove("auth_user");
         SecureStorage.Default.Remove("auth_role");
         SecureStorage.Default.Remove("auth_password");
-        SecureStorage.Default.Remove("server_fingerprint");
         
         _token = string.Empty;
         _username = string.Empty;

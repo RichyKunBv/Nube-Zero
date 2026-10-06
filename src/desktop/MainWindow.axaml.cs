@@ -53,6 +53,20 @@ public partial class MainWindow : Window
         Resources.Add("BytesToSizeConverter", new BytesToSizeConverter());
 
         ChkRememberPassword.IsVisible = OperatingSystem.IsMacOS();
+        try
+        {
+            var connectionSettings = ServerConnectionSettings.Load();
+            if (connectionSettings != null)
+            {
+                TxtServerUrl.Text = connectionSettings.ServerUrl;
+                TxtServerFingerprint.Text = connectionSettings.CertificateFingerprint;
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowLoginError($"No se pudo recuperar la conexión guardada: {ex.Message}");
+        }
+
         if (OperatingSystem.IsMacOS())
         {
             try
@@ -137,7 +151,7 @@ public partial class MainWindow : Window
     private async void BtnLogin_Click(object? sender, RoutedEventArgs e)
     {
         string user = TxtUser.Text?.Trim() ?? "";
-        string pass = TxtPassword.Text?.Trim() ?? "";
+        string pass = TxtPassword.Text ?? "";
         string serverUrl = TxtServerUrl.Text?.Trim() ?? "https://localhost:8080";
         string fingerprint = TxtServerFingerprint.Text?.Trim() ?? string.Empty;
 
@@ -167,6 +181,12 @@ public partial class MainWindow : Window
                 return;
             }
 
+            ServerConnectionSettings.Save(serverUrl, fingerprint);
+
+            BtnLogin.IsEnabled = false;
+            BtnLogin.Content = "Conectando...";
+            ShowLoginError("Validando credenciales; en una Raspberry Pi Zero puede tardar un poco.");
+
             _httpClient.Dispose();
             var handler = new SocketsHttpHandler
             {
@@ -183,7 +203,7 @@ public partial class MainWindow : Window
             var loginData = new { Username = user, Password = pass };
             var content = new StringContent(JsonSerializer.Serialize(loginData), Encoding.UTF8, "application/json");
             
-            var response = await _httpClient.PostAsync("/api/login", content);
+            using var response = await _httpClient.PostAsync("/api/login", content);
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
@@ -229,13 +249,39 @@ public partial class MainWindow : Window
             }
             else
             {
-                ShowLoginError("Usuario o contraseña incorrectos.");
+                ShowLoginError(await GetLoginFailureMessageAsync(response));
             }
         }
         catch (Exception ex)
         {
             ShowLoginError($"Error de conexión: {ex.Message}");
         }
+        finally
+        {
+            BtnLogin.IsEnabled = true;
+            BtnLogin.Content = "Conectar";
+        }
+    }
+
+    private static async Task<string> GetLoginFailureMessageAsync(HttpResponseMessage response)
+    {
+        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            return "El servidor rechazó el usuario o la contraseña (HTTP 401).";
+
+        string detail = string.Empty;
+        try
+        {
+            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            if (document.RootElement.TryGetProperty("error", out var error))
+                detail = error.GetString() ?? string.Empty;
+        }
+        catch (JsonException)
+        {
+        }
+
+        return string.IsNullOrWhiteSpace(detail)
+            ? $"El servidor respondió con HTTP {(int)response.StatusCode} ({response.ReasonPhrase})."
+            : $"El servidor respondió con HTTP {(int)response.StatusCode}: {detail}";
     }
 
     private async void BtnCheckUpdates_Click(object? sender, RoutedEventArgs e)
