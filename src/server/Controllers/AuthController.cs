@@ -49,11 +49,11 @@ namespace NubeZero.Server.Controllers
                     return;
                 }
 
-                response.StatusCode = 200;
-                response.ContentType = "application/json";
-                var result = new 
-                { 
-                    token = session.Token, 
+                // Generate JWT token
+                var jwtToken = JwtService.GenerateToken(session.Username, session.Role);
+                var result = new
+                {
+                    token = jwtToken,
                     username = session.Username,
                     role = session.Role
                 };

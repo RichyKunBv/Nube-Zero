@@ -52,3 +52,6 @@ packages/
 *.mdb
 # Flatpak generated
 flatpak/io.github.RichyKunBv.Ultraudio.metainfo.xml
+# Certificados - no subir claves privadas
+/cert/cert.key
+/cert/*.pfx

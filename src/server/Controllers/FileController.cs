@@ -6,6 +6,8 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using NubeZero.Shared;
 using NubeZero.Server.Services;
+using System.Security.Cryptography.X509Certificates;
+using NubeZero.Server.Data; // for accessing DB to get user password
 
 namespace NubeZero.Server.Controllers
 {
@@ -120,15 +122,16 @@ namespace NubeZero.Server.Controllers
                     return;
                 }
 
-                var fileInfo = new FileInfo(safePath);
-                response.ContentType = "application/octet-stream";
-                response.ContentLength64 = fileInfo.Length;
-                response.AddHeader("Content-Disposition", $"attachment; filename=\"{fileInfo.Name}\"");
+                // Read encrypted file and decrypt on the fly
+                using var encryptedStream = new FileStream(safePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, true);
+                // The password for decryption should be derived from the session/user; here we use a placeholder
+                string password = GetUserPasswordFromRequest(context.Request);
+                var decryptedBytes = await EncryptionService.DecryptAsync(encryptedStream, password);
 
-                using (var fs = new FileStream(safePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, true))
-                {
-                    await fs.CopyToAsync(response.OutputStream, 81920);
-                }
+                response.ContentType = "application/octet-stream";
+                response.ContentLength64 = decryptedBytes.Length;
+                response.AddHeader("Content-Disposition", $"attachment; filename=\"{Path.GetFileName(safePath)}\"");
+                await response.OutputStream.WriteAsync(decryptedBytes, 0, decryptedBytes.Length);
             }
             catch (UnauthorizedAccessException)
             {
@@ -208,17 +211,16 @@ namespace NubeZero.Server.Controllers
                     return;
                 }
 
-                if (File.Exists(safePath))
-                {
-                    File.Replace(temporaryPath, safePath, null);
-                }
-                else
-                {
-                    File.Move(temporaryPath, safePath);
-                }
+                // ----- ENCRYPT BEFORE SAVING -----
+                using var plainStream = new FileStream(temporaryPath, FileMode.Open, FileAccess.Read);
+                string password = GetUserPassword(username);
+                var encryptedBytes = await EncryptionService.EncryptAsync(plainStream, password);
+                await File.WriteAllBytesAsync(safePath, encryptedBytes);
+                // Delete temporary plaintext file
+                File.Delete(temporaryPath);
                 temporaryPath = null;
 
-                _dbContext.SaveFileMetadata(safePath, username, receivedLength);
+                _dbContext.SaveFileMetadata(safePath, username, encryptedBytes.Length);
 
                 response.StatusCode = 201;
                 response.ContentType = "application/json";
@@ -384,6 +386,26 @@ namespace NubeZero.Server.Controllers
             {
                 response.Close();
             }
+        }
+
+        // Helper to retrieve user password for encryption/decryption
+        private string GetUserPassword(string username)
+        {
+            // TODO: replace with secure secret manager or derived key per session.
+            // Placeholder uses DB context method (must exist) to fetch stored password hash.
+            return _dbContext.GetUserPassword(username) ?? string.Empty;
+        }
+
+        // Helper to obtain password from request (e.g., from session token).
+        private string GetUserPasswordFromRequest(HttpListenerRequest request)
+        {
+            // Placeholder: extract token, map to user, then retrieve password.
+            // In a real implementation, the password would be derived from a secret shared during login.
+            var token = request.Headers["Authorization"]?.Replace("Bearer ", "");
+            if (string.IsNullOrWhiteSpace(token)) return string.Empty;
+            var session = _authInterceptor?.ValidateSession(request);
+            if (session == null) return string.Empty;
+            return GetUserPassword(session.Username);
         }
 
         private async Task WriteErrorAsync(HttpListenerResponse response, int statusCode, string message)

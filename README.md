@@ -1,5 +1,3 @@
-<div align="center">
-
 # Nube-Zero ☁️
 
 [![Versión](https://img.shields.io/badge/Versión-v0.7.4-blue.svg)](https://github.com/RichyKunBv/Nube-Zero)
@@ -200,6 +198,27 @@ sda           8:0    1 14.5G  0 disk
 
 ---
 
+### Requisitos minimos para los clientes
+### Windows
+* Windows 10 21H2 o superior
+* Windows 11 21H2 o superior
+
+### macOS
+* macOS 15 (Sequoia) o superior
+
+### Linux
+* Debian 13 o superior
+* Fedora 43 o superior
+* openSUSE Leap 16.0 o superior
+* Red Hat Enterprise Linux	8 o superior
+* SUSE Linux Enterprise	15.7 o superior
+* Ubuntu	22.04 o superior
+
+### Android
+* Android 14 o superior
+
+---
+
 ## ⚠️ Aviso de Ciclo de Vida y Soporte de Hardware (Pi Zero W)
 
 > [!WARNING]
@@ -213,3 +232,17 @@ sda           8:0    1 14.5G  0 disk
 **Seguridad del Sistema Operativo:** El sistema operativo base para esta placa (Raspberry Pi OS 13 / Debian Trixie) finalizará su soporte estándar de seguridad a mediados de 2028, dejando al servidor expuesto a vulnerabilidades de red.
 
 *Nota: Las versiones de Nube-Zero optimizadas para Mono (`net472`) publicadas antes de enero de 2028 permanecerán disponibles en el historial de Releases para su uso local en modo congelado ("appliance"), pero no recibirán nuevas funciones ni parches.*
+
+
+## ⚠️ Aviso de Ciclo de Vida y Soporte del Cliente (macOS Intel)
+
+> [!WARNING]
+> **Fin del empaquetado para arquitectura Intel x64 en macOS**
+>
+> Por políticas de estabilidad y seguridad, el desarrollo del cliente de Nube-Zero migra exclusivamente de versión LTS en LTS de .NET. Al realizar la transición planificada hacia **.NET 12 (LTS)** a finales de 2027, **se dejará de compilar y distribuir oficialmente la versión `osx-x64` para macOS**. 
+
+### ¿Por qué esta decisión?
+* **Regla de las 3 últimas versiones:** Microsoft alinea el SDK de .NET con el ciclo de soporte de Apple. Con el lanzamiento teórico de macOS 28 en 2027, los tres sistemas operativos soportados activamente por el ecosistema serán plataformas optimizadas de forma nativa y exclusiva para Apple Silicon (ARM64).
+* **Bloqueo del Compilador:** Al remover Apple las librerías de enlace heredadas en Xcode y las imágenes virtuales de integración continua, el entorno automatizado de GitHub Actions perderá la capacidad técnica de compilar binarios `osx-x64` estables basados en el runtime de .NET 12.
+
+*Nota: Los usuarios de Macs con procesadores Intel antiguos podrán seguir utilizando de forma indefinida las versiones cliente basadas en .NET 10, pero no podrán actualizar a funciones del ecosistema de .NET 12. (una disculpa pero no puedo estar sobre una version que se quede sin soporte ya que seria un riesgo para su seguridad ya que es una Nube donde pueden subir su informacion importante y privada (datos que no recopilo ya que valoro la seguridad) asi que sera necesario actualizar el lenguaje)*

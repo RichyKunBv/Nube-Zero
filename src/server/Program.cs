@@ -108,7 +108,18 @@ namespace NubeZero.Server
 
                 Console.WriteLine($"[{request.HttpMethod}] {request.Url.AbsolutePath}");
                 response.AppendHeader("Access-Control-Allow-Origin", "*");
-                
+                // Rate limiting (max 10 req/s per IP)
+                if (!RateLimiter.Allow(request.RemoteEndPoint.Address))
+                {
+                    response.StatusCode = 429; // Too Many Requests
+                    response.Close();
+                    return;
+                }
+                // Security headers
+                response.AppendHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+                response.AppendHeader("X-Content-Type-Options", "nosniff");
+                response.AppendHeader("X-Frame-Options", "DENY");
+                response.AppendHeader("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self';");
                 // Manejo de pre-flight CORS
                 if (request.HttpMethod == "OPTIONS")
                 {
