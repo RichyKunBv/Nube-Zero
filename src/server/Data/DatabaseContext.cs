@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -88,9 +89,9 @@ namespace NubeZero.Server.Data
                     string json = File.ReadAllText(_dbPath);
                     _state = JsonSerializer.Deserialize<DatabaseState>(json) ?? new DatabaseState();
                 }
-                catch
+                catch (JsonException ex)
                 {
-                    _state = new DatabaseState();
+                    throw new InvalidDataException("La base de datos contiene JSON inválido; se detuvo el inicio para evitar perder datos o recrear credenciales.", ex);
                 }
             }
             else
@@ -99,6 +100,9 @@ namespace NubeZero.Server.Data
                 Save();
             }
 
+            _state.Usuarios ??= new List<User>();
+            _state.Sesiones ??= new List<Session>();
+            _state.FileMetadata ??= new List<FileMeta>();
             if (_state.Notas == null)
             {
                 _state.Notas = new List<NoteItem>();
@@ -109,9 +113,20 @@ namespace NubeZero.Server.Data
                 bool modified = false;
                 for (int i = 0; i < _state.Usuarios.Count; i++)
                 {
+                    if (string.Equals(_state.Usuarios[i].Username, "admin", StringComparison.OrdinalIgnoreCase)
+                        && _state.Usuarios[i].PasswordHash == LegacyHashPassword("admin"))
+                    {
+                        string replacementPassword = CreateRandomPassword();
+                        _state.Usuarios[i].PasswordHash = HashPassword(replacementPassword);
+                        Console.WriteLine("La contraseña predeterminada admin/admin fue revocada.");
+                        Console.WriteLine("Contraseña de recuperación de admin (guárdala y cámbiala al iniciar sesión):");
+                        Console.WriteLine(replacementPassword);
+                        modified = true;
+                    }
+
                     if (string.IsNullOrWhiteSpace(_state.Usuarios[i].Role))
                     {
-                        if (i == 0 || _state.Usuarios[i].Username.Equals("admin", StringComparison.OrdinalIgnoreCase))
+                        if (i == 0 || string.Equals(_state.Usuarios[i].Username, "admin", StringComparison.OrdinalIgnoreCase))
                             _state.Usuarios[i].Role = "Admin";
                         else
                             _state.Usuarios[i].Role = "Estandar";
@@ -144,17 +159,10 @@ namespace NubeZero.Server.Data
                     JsonSerializer.Serialize(fs, _state, new JsonSerializerOptions { WriteIndented = true });
                 }
                 
-                // Mover de forma atómica para prevenir corrupción si se va la luz (compatible con .NET 4.7.2)
-                try
-                {
-                    if (File.Exists(_dbPath))
-                        File.Delete(_dbPath);
+                if (File.Exists(_dbPath))
+                    File.Replace(tempPath, _dbPath, null);
+                else
                     File.Move(tempPath, _dbPath);
-                }
-                catch
-                {
-                    throw;
-                }
             }
         }
 
@@ -171,12 +179,32 @@ namespace NubeZero.Server.Data
             if (Console.IsInputRedirected)
             {
                 Console.WriteLine("Entorno no interactivo detectado (ej. systemd).");
-                Console.WriteLine("Creando usuario administrador por defecto.");
                 username = "admin";
-                password = "admin";
-                Console.WriteLine($"-> Usuario: {username}");
-                Console.WriteLine($"-> Contraseña: {password}");
-                Console.WriteLine("¡Por favor cambia esta contraseña inmediatamente!");
+                string encodedPassword = Environment.GetEnvironmentVariable("NUBEZERO_INITIAL_ADMIN_PASSWORD_BASE64");
+                if (!string.IsNullOrWhiteSpace(encodedPassword))
+                {
+                    byte[] passwordBytes;
+                    try
+                    {
+                        passwordBytes = Convert.FromBase64String(encodedPassword);
+                    }
+                    catch (FormatException ex)
+                    {
+                        throw new InvalidOperationException("NUBEZERO_INITIAL_ADMIN_PASSWORD_BASE64 no contiene Base64 válido.", ex);
+                    }
+
+                    try
+                    {
+                        password = Encoding.UTF8.GetString(passwordBytes);
+                    }
+                    finally
+                    {
+                        Array.Clear(passwordBytes, 0, passwordBytes.Length);
+                    }
+                }
+                if (!IsPasswordAcceptable(password))
+                    throw new InvalidOperationException("Configura una contraseña inicial de al menos 12 caracteres durante la instalación antes del primer inicio.");
+                Console.WriteLine("Creando la cuenta inicial admin con la contraseña privada configurada en la instalación.");
             }
             else
             {
@@ -186,9 +214,9 @@ namespace NubeZero.Server.Data
                     username = Console.ReadLine()?.Trim();
                 }
 
-                while (string.IsNullOrWhiteSpace(password))
+                while (!IsPasswordAcceptable(password))
                 {
-                    Console.Write("Introduce la nueva contraseña: ");
+                    Console.Write("Introduce una contraseña de al menos 12 caracteres: ");
                     password = Console.ReadLine()?.Trim();
                 }
             }
@@ -213,16 +241,20 @@ namespace NubeZero.Server.Data
 
         public AuthSession Authenticate(string username, string password)
         {
-            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)) return null;
-
-            string hash = HashPassword(password);
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password) || password.Length > 1024) return null;
 
             lock (_lock)
             {
-                var user = _state.Usuarios.FirstOrDefault(u => u.Username.Equals(username, StringComparison.OrdinalIgnoreCase) && u.PasswordHash == hash);
-                if (user == null) return null;
+                var user = _state.Usuarios.FirstOrDefault(u => string.Equals(u.Username, username, StringComparison.OrdinalIgnoreCase));
+                if (user == null || !VerifyPassword(password, user.PasswordHash)) return null;
 
-                string token = Guid.NewGuid().ToString("N");
+                if (!IsCurrentPasswordHash(user.PasswordHash))
+                {
+                    user.PasswordHash = HashPassword(password);
+                    Save();
+                }
+
+                string token = CreateSecureToken();
                 _state.Sesiones.Add(new Session
                 {
                     Token = token,
@@ -313,7 +345,7 @@ namespace NubeZero.Server.Data
 
         public bool AddUser(string username, string password, string role = "Estandar")
         {
-            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)) return false;
+            if (!IsUsernameAcceptable(username) || !IsPasswordAcceptable(password)) return false;
 
             string validRole = "Estandar";
             if (role?.Equals("Admin", StringComparison.OrdinalIgnoreCase) == true) validRole = "Admin";
@@ -322,7 +354,7 @@ namespace NubeZero.Server.Data
 
             lock (_lock)
             {
-                if (_state.Usuarios.Any(u => u.Username.Equals(username, StringComparison.OrdinalIgnoreCase)))
+                if (_state.Usuarios.Any(u => string.Equals(u.Username, username, StringComparison.OrdinalIgnoreCase)))
                 {
                     return false; // El usuario ya existe
                 }
@@ -376,9 +408,9 @@ namespace NubeZero.Server.Data
             }
         }
 
-        public bool ChangePassword(string username, string newPassword)
+        public bool ChangePassword(string username, string newPassword, string currentSessionToken = null)
         {
-            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(newPassword)) return false;
+            if (!IsPasswordAcceptable(newPassword)) return false;
 
             lock (_lock)
             {
@@ -386,6 +418,7 @@ namespace NubeZero.Server.Data
                 if (user == null) return false;
 
                 user.PasswordHash = HashPassword(newPassword);
+                _state.Sesiones.RemoveAll(s => s.UserId == user.Id && s.Token != currentSessionToken);
                 Save();
                 return true;
             }
@@ -393,12 +426,19 @@ namespace NubeZero.Server.Data
 
         public bool ValidatePassword(string username, string password)
         {
-            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)) return false;
-
-            string hash = HashPassword(password);
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password) || password.Length > 1024) return false;
             lock (_lock)
             {
-                return _state.Usuarios.Any(u => u.Username.Equals(username, StringComparison.OrdinalIgnoreCase) && u.PasswordHash == hash);
+                var user = _state.Usuarios.FirstOrDefault(u => u.Username.Equals(username, StringComparison.OrdinalIgnoreCase));
+                if (user == null || !VerifyPassword(password, user.PasswordHash))
+                    return false;
+
+                if (!IsCurrentPasswordHash(user.PasswordHash))
+                {
+                    user.PasswordHash = HashPassword(password);
+                    Save();
+                }
+                return true;
             }
         }
 
@@ -512,18 +552,170 @@ namespace NubeZero.Server.Data
             }
         }
 
+        private const int PasswordHashIterations = 210000;
+        private const int PasswordSaltSize = 16;
+        private const int PasswordHashSize = 32;
+        private const string PasswordHashScheme = "pbkdf2-sha256";
+
+        private static bool IsPasswordAcceptable(string password)
+        {
+            return !string.IsNullOrWhiteSpace(password) && password.Length >= 12 && password.Length <= 1024;
+        }
+
+        private static bool IsUsernameAcceptable(string username)
+        {
+            return !string.IsNullOrWhiteSpace(username)
+                && username.Length <= 64
+                && !username.Any(char.IsControl);
+        }
+
+        private static string CreateSecureToken()
+        {
+            byte[] token = new byte[32];
+            using (var random = RandomNumberGenerator.Create())
+                random.GetBytes(token);
+
+            try
+            {
+                return Convert.ToBase64String(token).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+            }
+            finally
+            {
+                Array.Clear(token, 0, token.Length);
+            }
+        }
+
+        private static string CreateRandomPassword()
+        {
+            byte[] randomBytes = new byte[24];
+            using (var random = RandomNumberGenerator.Create())
+                random.GetBytes(randomBytes);
+
+            try
+            {
+                return Convert.ToBase64String(randomBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+            }
+            finally
+            {
+                Array.Clear(randomBytes, 0, randomBytes.Length);
+            }
+        }
+
         private string HashPassword(string password)
+        {
+            byte[] salt = new byte[PasswordSaltSize];
+            byte[] passwordBytes = Encoding.UTF8.GetBytes(password);
+            byte[] hash = null;
+            using (var random = RandomNumberGenerator.Create())
+                random.GetBytes(salt);
+
+            try
+            {
+#if NET6_0_OR_GREATER
+                hash = Rfc2898DeriveBytes.Pbkdf2(passwordBytes, salt, PasswordHashIterations, HashAlgorithmName.SHA256, PasswordHashSize);
+#else
+                using (var kdf = new Rfc2898DeriveBytes(passwordBytes, salt, PasswordHashIterations, HashAlgorithmName.SHA256))
+                    hash = kdf.GetBytes(PasswordHashSize);
+#endif
+
+                return string.Join("$", PasswordHashScheme, PasswordHashIterations.ToString(CultureInfo.InvariantCulture),
+                    Convert.ToBase64String(salt), Convert.ToBase64String(hash));
+            }
+            finally
+            {
+                Array.Clear(salt, 0, salt.Length);
+                Array.Clear(passwordBytes, 0, passwordBytes.Length);
+                if (hash != null)
+                    Array.Clear(hash, 0, hash.Length);
+            }
+        }
+
+        private static bool VerifyPassword(string password, string storedHash)
+        {
+            if (string.IsNullOrEmpty(storedHash))
+                return false;
+
+            string[] parts = storedHash.Split('$');
+            if (parts.Length == 4 && parts[0] == PasswordHashScheme
+                && int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out int iterations)
+                && iterations >= 100000 && iterations <= 500000)
+            {
+                byte[] salt;
+                byte[] expectedHash;
+                try
+                {
+                    salt = Convert.FromBase64String(parts[2]);
+                    expectedHash = Convert.FromBase64String(parts[3]);
+                }
+                catch (FormatException)
+                {
+                    return false;
+                }
+
+                if (salt.Length != PasswordSaltSize || expectedHash.Length != PasswordHashSize)
+                {
+                    Array.Clear(salt, 0, salt.Length);
+                    Array.Clear(expectedHash, 0, expectedHash.Length);
+                    return false;
+                }
+
+                byte[] passwordBytes = Encoding.UTF8.GetBytes(password);
+                byte[] actualHash;
+                try
+                {
+#if NET6_0_OR_GREATER
+                    actualHash = Rfc2898DeriveBytes.Pbkdf2(passwordBytes, salt, iterations, HashAlgorithmName.SHA256, PasswordHashSize);
+#else
+                    using (var kdf = new Rfc2898DeriveBytes(passwordBytes, salt, iterations, HashAlgorithmName.SHA256))
+                        actualHash = kdf.GetBytes(PasswordHashSize);
+#endif
+                }
+                finally
+                {
+                    Array.Clear(passwordBytes, 0, passwordBytes.Length);
+                    Array.Clear(salt, 0, salt.Length);
+                }
+
+                bool matches = FixedTimeEquals(actualHash, expectedHash);
+                Array.Clear(actualHash, 0, actualHash.Length);
+                Array.Clear(expectedHash, 0, expectedHash.Length);
+                return matches;
+            }
+
+            string legacyHash = LegacyHashPassword(password);
+            return FixedTimeEquals(Encoding.UTF8.GetBytes(legacyHash), Encoding.UTF8.GetBytes(storedHash));
+        }
+
+        private static bool IsCurrentPasswordHash(string storedHash)
+        {
+            string[] parts = storedHash?.Split('$');
+            return parts != null && parts.Length == 4 && parts[0] == PasswordHashScheme
+                && int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out int iterations)
+                && iterations == PasswordHashIterations;
+        }
+
+        private static string LegacyHashPassword(string password)
         {
             using (var sha256 = SHA256.Create())
             {
                 byte[] bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
                 var builder = new StringBuilder();
                 foreach (byte b in bytes)
-                {
                     builder.Append(b.ToString("x2"));
-                }
+                Array.Clear(bytes, 0, bytes.Length);
                 return builder.ToString();
             }
+        }
+
+        private static bool FixedTimeEquals(byte[] left, byte[] right)
+        {
+            if (left.Length != right.Length)
+                return false;
+
+            int difference = 0;
+            for (int i = 0; i < left.Length; i++)
+                difference |= left[i] ^ right[i];
+            return difference == 0;
         }
     }
 }

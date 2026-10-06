@@ -16,6 +16,7 @@ public partial class MainPage : ContentPage
     private string _serverIp = string.Empty;
     private string _username = string.Empty;
     private string _role = "Estandar";
+    private byte[] _encryptionKey = Array.Empty<byte>();
     private string _currentPath = string.Empty;
     private string _transferMessage = string.Empty;
     private long _lastProgressUpdate;
@@ -55,7 +56,7 @@ public partial class MainPage : ContentPage
             else if (servers.Count == 1)
             {
                 var s = servers[0];
-                TxtServerIp.Text = s.IpAddress;
+                TxtServerIp.Text = $"https://{s.IpAddress}:{s.Port}";
                 TxtDiscoveryStatus.Text = $"✓ Servidor encontrado: {s.ServerName} ({s.IpAddress})";
             }
             else
@@ -81,7 +82,8 @@ public partial class MainPage : ContentPage
     {
         if (PkrDiscoveredServers.SelectedIndex >= 0 && PkrDiscoveredServers.SelectedIndex < _discoveredServers.Count)
         {
-            TxtServerIp.Text = _discoveredServers[PkrDiscoveredServers.SelectedIndex].IpAddress;
+            var server = _discoveredServers[PkrDiscoveredServers.SelectedIndex];
+            TxtServerIp.Text = $"https://{server.IpAddress}:{server.Port}";
         }
     }
 
@@ -94,6 +96,9 @@ public partial class MainPage : ContentPage
             var savedUser = await SecureStorage.Default.GetAsync("auth_user");
             var savedRole = await SecureStorage.Default.GetAsync("auth_role");
             var savedPassword = await SecureStorage.Default.GetAsync("auth_password");
+            var savedFingerprint = await SecureStorage.Default.GetAsync("server_fingerprint");
+            if (!string.IsNullOrWhiteSpace(savedFingerprint))
+                TxtServerFingerprint.Text = savedFingerprint;
 
             if (!string.IsNullOrEmpty(savedIp) && !string.IsNullOrEmpty(savedUser) && !string.IsNullOrEmpty(savedPassword))
             {
@@ -115,6 +120,7 @@ public partial class MainPage : ContentPage
             TxtServerIp.Text = savedIp;
             
             InitHttpClient();
+            await LoadEncryptionKeyAsync();
             await TryConnectAsync();
         }
         catch (Exception ex)
@@ -135,19 +141,31 @@ public partial class MainPage : ContentPage
     {
         if (_httpClient != null) _httpClient.Dispose();
         
-        string cleanIp = _serverIp.Replace("http://", "").Replace("https://", "").Replace(":8080", "").TrimEnd('/');
-        string baseAddress = $"http://{cleanIp}:8080";
+        string serverAddress = _serverIp.Trim();
+        if (!serverAddress.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            if (serverAddress.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("El servidor debe usar HTTPS. Las conexiones HTTP están deshabilitadas.");
+            serverAddress = $"https://{serverAddress}:8080";
+        }
 
+        if (!Uri.TryCreate(serverAddress, UriKind.Absolute, out var serverUri)
+            || serverUri.Scheme != Uri.UriSchemeHttps
+            || !string.IsNullOrEmpty(serverUri.UserInfo))
+            throw new InvalidOperationException("La URL del servidor HTTPS no es válida.");
+
+        string fingerprint = TxtServerFingerprint.Text?.Trim() ?? string.Empty;
         var handler = new SocketsHttpHandler
         {
             PooledConnectionLifetime = TimeSpan.FromMinutes(15),
             ConnectTimeout = TimeSpan.FromSeconds(30),
             EnableMultipleHttp2Connections = true
         };
+        handler.SslOptions.RemoteCertificateValidationCallback = PinnedCertificateHandler.CreateCallback(fingerprint);
 
         _httpClient = new HttpClient(handler)
         {
-            BaseAddress = new Uri(baseAddress),
+            BaseAddress = serverUri,
             Timeout = TimeSpan.FromHours(2)
         };
         if (!string.IsNullOrEmpty(_token))
@@ -159,6 +177,17 @@ public partial class MainPage : ContentPage
     private async void BtnLogin_Clicked(object sender, EventArgs e)
     {
         _serverIp = TxtServerIp.Text?.Trim() ?? "";
+        if (_serverIp.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+        {
+            ShowLoginError("La conexión por HTTP está deshabilitada. Usa HTTPS.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(TxtServerFingerprint.Text))
+        {
+            ShowLoginError("Verifica por SSH e introduce la huella SHA-256 del certificado del servidor.");
+            return;
+        }
         string user = TxtUser.Text?.Trim() ?? "";
         string pass = TxtPassword.Text?.Trim() ?? "";
 
@@ -285,10 +314,12 @@ public partial class MainPage : ContentPage
         _role = result.TryGetProperty("role", out var roleProperty) ? roleProperty.GetString() ?? "Estandar" : "Estandar";
 
         _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _token);
+        await LoadEncryptionKeyAsync();
 
         try
         {
             await SecureStorage.Default.SetAsync("server_ip", _serverIp);
+            await SecureStorage.Default.SetAsync("server_fingerprint", TxtServerFingerprint.Text?.Trim() ?? string.Empty);
             await SecureStorage.Default.SetAsync("auth_token", _token);
             await SecureStorage.Default.SetAsync("auth_user", _username);
             await SecureStorage.Default.SetAsync("auth_role", _role);
@@ -316,6 +347,32 @@ public partial class MainPage : ContentPage
         LoginView.IsVisible = false;
         MainView.IsVisible = true;
         await LoadFilesAsync();
+    }
+
+    private async Task LoadEncryptionKeyAsync()
+    {
+        using var response = await _httpClient.GetAsync("/api/encryption-key");
+        response.EnsureSuccessStatusCode();
+        var result = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
+        string encodedKey = result.GetProperty("key").GetString() ?? string.Empty;
+        byte[] key;
+        try
+        {
+            key = Convert.FromBase64String(encodedKey);
+        }
+        catch (FormatException ex)
+        {
+            throw new InvalidDataException("El servidor devolvió una clave de cifrado inválida.", ex);
+        }
+
+        if (key.Length != 32)
+        {
+            Array.Clear(key, 0, key.Length);
+            throw new InvalidDataException("La clave de cifrado del servidor debe contener 32 bytes.");
+        }
+
+        Array.Clear(_encryptionKey, 0, _encryptionKey.Length);
+        _encryptionKey = key;
     }
 
     private void ShowLoginError(string msg)
@@ -588,6 +645,7 @@ public partial class MainPage : ContentPage
         if (!_thumbnailRequests.TryAdd(thumbnailPath, 0)) return;
 
         string sourcePath = thumbnailPath + ".source";
+        string encryptedPath = sourcePath + ".encrypted";
         bool hasThumbnailSlot = false;
         try
         {
@@ -596,10 +654,10 @@ public partial class MainPage : ContentPage
             string remotePath = Uri.EscapeDataString(GetRemotePath(file.Nombre));
             using var response = await _httpClient.GetAsync($"/api/download?path={remotePath}", HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
-            if (response.Content.Headers.ContentLength > maxSourceBytes) return;
+            if (response.Content.Headers.ContentLength > maxSourceBytes + 80) return;
 
             using var input = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
-            using (var output = new FileStream(sourcePath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
+            using (var output = new FileStream(encryptedPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
             {
                 var buffer = new byte[81920];
                 long downloaded = 0;
@@ -607,10 +665,17 @@ public partial class MainPage : ContentPage
                 while ((count = await input.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false)) > 0)
                 {
                     downloaded += count;
-                    if (downloaded > maxSourceBytes) return;
+                    if (downloaded > maxSourceBytes + 80) return;
                     await output.WriteAsync(buffer, 0, count).ConfigureAwait(false);
                 }
             }
+
+            using (var encrypted = new FileStream(encryptedPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var plaintext = new FileStream(sourcePath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
+            {
+                await FileEncryptionService.DecryptAsync(encrypted, plaintext, _encryptionKey).ConfigureAwait(false);
+            }
+            if (new FileInfo(sourcePath).Length > maxSourceBytes) return;
 
             bool created = await Task.Run(() =>
             {
@@ -658,6 +723,7 @@ public partial class MainPage : ContentPage
         {
             _thumbnailRequests.TryRemove(thumbnailPath, out _);
             if (File.Exists(sourcePath)) File.Delete(sourcePath);
+            if (File.Exists(encryptedPath)) File.Delete(encryptedPath);
             if (hasThumbnailSlot) _thumbnailSlots.Release();
         }
     }
@@ -687,10 +753,13 @@ public partial class MainPage : ContentPage
         SecureStorage.Default.Remove("auth_user");
         SecureStorage.Default.Remove("auth_role");
         SecureStorage.Default.Remove("auth_password");
+        SecureStorage.Default.Remove("server_fingerprint");
         
         _token = string.Empty;
         _username = string.Empty;
         _role = "Estandar";
+        Array.Clear(_encryptionKey, 0, _encryptionKey.Length);
+        _encryptionKey = Array.Empty<byte>();
         _currentPath = string.Empty;
         
         if (_httpClient != null) 
@@ -908,7 +977,7 @@ public partial class MainPage : ContentPage
             }
 
             using (fs)
-            using (var content = new ProgressStreamContent(fs, UpdateTransferProgress, fileLength))
+            using (var content = new EncryptedProgressStreamContent(fs, _encryptionKey, UpdateTransferProgress, fileLength))
             {
                 string relativePath = Uri.EscapeDataString(GetRemotePath(fileName));
                 using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/upload?path={relativePath}")
@@ -960,6 +1029,7 @@ public partial class MainPage : ContentPage
             {
                 Android.Net.Uri? destination = null;
                 MainActivity? activity = null;
+                string? encryptedTemporaryPath = null;
                 try
                 {
                     string safeFileName = Path.GetFileName(dto.Nombre);
@@ -980,9 +1050,28 @@ public partial class MainPage : ContentPage
                     using var response = await _httpClient.GetAsync($"/api/download?path={relativePath}", HttpCompletionOption.ResponseHeadersRead);
                     response.EnsureSuccessStatusCode();
 
+                    encryptedTemporaryPath = Path.Combine(FileSystem.CacheDirectory, "download-" + Guid.NewGuid().ToString("N") + ".nze");
                     using var stream = await response.Content.ReadAsStreamAsync();
                     long total = response.Content.Headers.ContentLength ?? -1;
-                    await activity.CopyToSaveDestinationAsync(destination, stream, total, UpdateTransferProgress);
+                    long transferred = 0;
+                    using (var encryptedOutput = new FileStream(encryptedTemporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true))
+                    {
+                        var buffer = new byte[81920];
+                        int count;
+                        while ((count = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                        {
+                            await encryptedOutput.WriteAsync(buffer, 0, count);
+                            transferred += count;
+                            UpdateTransferProgress(transferred, total);
+                        }
+                        await encryptedOutput.FlushAsync();
+                    }
+
+                    if (total >= 0 && transferred != total)
+                        throw new IOException("La descarga llegó incompleta.");
+
+                    using (var encryptedInput = new FileStream(encryptedTemporaryPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                        await activity.CopyDecryptedToSaveDestinationAsync(destination, encryptedInput, _encryptionKey, total, UpdateTransferProgress);
                     TxtStatus.Text = "Archivo guardado correctamente";
                 }
                 catch (Exception ex)
@@ -996,6 +1085,8 @@ public partial class MainPage : ContentPage
                 }
                 finally
                 {
+                    if (encryptedTemporaryPath != null && File.Exists(encryptedTemporaryPath))
+                        File.Delete(encryptedTemporaryPath);
                     HideTransfer();
                 }
             }

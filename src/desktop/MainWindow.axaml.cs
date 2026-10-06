@@ -11,6 +11,7 @@ using System.Text;
 using System.Text.Json;
 using System.Security.Cryptography;
 using System.Threading;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Data.Converters;
@@ -28,12 +29,13 @@ public partial class MainWindow : Window
 {
     private HttpClient _httpClient = new HttpClient
     {
-        BaseAddress = new Uri("http://localhost:8080"),
+        BaseAddress = new Uri("https://localhost:8080"),
         Timeout = TimeSpan.FromHours(2)
     };
     private string _token = string.Empty;
     private string _username = string.Empty;
     private string _role = "Estandar";
+    private byte[] _encryptionKey = Array.Empty<byte>();
     private string _currentPath = string.Empty;
     private string _transferMessage = string.Empty;
     private long _lastProgressUpdate;
@@ -60,6 +62,7 @@ public partial class MainWindow : Window
                 {
                     _hasSavedMacCredentials = true;
                     TxtServerUrl.Text = savedCredentials.ServerUrl;
+                    TxtServerFingerprint.Text = savedCredentials.CertificateFingerprint;
                     TxtUser.Text = savedCredentials.Username;
                     TxtPassword.Text = savedCredentials.Password;
                     ChkRememberPassword.IsChecked = true;
@@ -93,7 +96,7 @@ public partial class MainWindow : Window
             else if (servers.Count == 1)
             {
                 var s = servers[0];
-                TxtServerUrl.Text = $"http://{s.IpAddress}:{s.Port}";
+                TxtServerUrl.Text = $"https://{s.IpAddress}:{s.Port}";
                 TxtDiscoveryStatus.Text = $"✓ Servidor encontrado: {s.ServerName} ({s.IpAddress})";
             }
             else
@@ -105,7 +108,7 @@ public partial class MainWindow : Window
                     CmbDiscoveredServers.Items.Add(new ComboBoxItem
                     {
                         Content = $"☁️ {s.ServerName} ({s.IpAddress}:{s.Port}) - {s.Version}",
-                        Tag = $"http://{s.IpAddress}:{s.Port}"
+                        Tag = $"https://{s.IpAddress}:{s.Port}"
                     });
                 }
                 CmbDiscoveredServers.IsVisible = true;
@@ -135,7 +138,8 @@ public partial class MainWindow : Window
     {
         string user = TxtUser.Text?.Trim() ?? "";
         string pass = TxtPassword.Text?.Trim() ?? "";
-        string serverUrl = TxtServerUrl.Text?.Trim() ?? "http://localhost:8080";
+        string serverUrl = TxtServerUrl.Text?.Trim() ?? "https://localhost:8080";
+        string fingerprint = TxtServerFingerprint.Text?.Trim() ?? string.Empty;
 
         if (string.IsNullOrEmpty(user) || string.IsNullOrEmpty(pass))
         {
@@ -145,12 +149,34 @@ public partial class MainWindow : Window
 
         try
         {
-            if (!serverUrl.StartsWith("http://") && !serverUrl.StartsWith("https://"))
-                serverUrl = "http://" + serverUrl;
-                
-            _httpClient = new HttpClient
+            if (!serverUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                && !serverUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                serverUrl = "https://" + serverUrl;
+
+            if (!Uri.TryCreate(serverUrl, UriKind.Absolute, out var serverUri)
+                || serverUri.Scheme != Uri.UriSchemeHttps
+                || !string.IsNullOrEmpty(serverUri.UserInfo))
             {
-                BaseAddress = new Uri(serverUrl),
+                ShowLoginError("La conexión debe usar HTTPS y una URL válida.");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(fingerprint))
+            {
+                ShowLoginError("Verifica por SSH e introduce la huella SHA-256 del certificado del servidor.");
+                return;
+            }
+
+            _httpClient.Dispose();
+            var handler = new SocketsHttpHandler
+            {
+                PooledConnectionLifetime = TimeSpan.FromMinutes(15),
+                ConnectTimeout = TimeSpan.FromSeconds(30)
+            };
+            handler.SslOptions.RemoteCertificateValidationCallback = PinnedCertificateHandler.CreateCallback(fingerprint);
+            _httpClient = new HttpClient(handler)
+            {
+                BaseAddress = serverUri,
                 Timeout = TimeSpan.FromHours(2)
             };
             
@@ -172,7 +198,7 @@ public partial class MainWindow : Window
                     {
                         if (ChkRememberPassword.IsChecked == true)
                         {
-                            MacOsCredentialStore.Save(serverUrl, _username, pass);
+                            MacOsCredentialStore.Save(serverUrl, _username, pass, fingerprint);
                             _hasSavedMacCredentials = true;
                         }
                         else if (_hasSavedMacCredentials)
@@ -188,6 +214,7 @@ public partial class MainWindow : Window
                 }
                 
                 _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _token);
+                await LoadEncryptionKeyAsync();
                 _currentPath = string.Empty;
                 
                 // Actualizar interfaz según el rol
@@ -560,6 +587,7 @@ public partial class MainWindow : Window
         if (!_thumbnailRequests.TryAdd(cachePath, true)) return;
 
         string sourcePath = cachePath + ".source";
+        string encryptedPath = sourcePath + ".encrypted";
         bool hasThumbnailSlot = false;
         try
         {
@@ -568,10 +596,10 @@ public partial class MainWindow : Window
             string remotePath = Uri.EscapeDataString(GetRemotePath(file.Nombre));
             using var response = await _httpClient.GetAsync($"/api/download?path={remotePath}", HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
-            if (response.Content.Headers.ContentLength > maxSourceBytes) return;
+            if (response.Content.Headers.ContentLength > maxSourceBytes + 80) return;
 
             using var input = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
-            using (var output = new FileStream(sourcePath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
+            using (var output = new FileStream(encryptedPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
             {
                 var buffer = new byte[81920];
                 long downloaded = 0;
@@ -579,10 +607,17 @@ public partial class MainWindow : Window
                 while ((count = await input.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false)) > 0)
                 {
                     downloaded += count;
-                    if (downloaded > maxSourceBytes) return;
+                    if (downloaded > maxSourceBytes + 80) return;
                     await output.WriteAsync(buffer, 0, count).ConfigureAwait(false);
                 }
             }
+
+            using (var encrypted = new FileStream(encryptedPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var plaintext = new FileStream(sourcePath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
+            {
+                await FileEncryptionService.DecryptAsync(encrypted, plaintext, _encryptionKey).ConfigureAwait(false);
+            }
+            if (new FileInfo(sourcePath).Length > maxSourceBytes) return;
 
             if (isVideo)
             {
@@ -608,6 +643,7 @@ public partial class MainWindow : Window
         {
             _thumbnailRequests.TryRemove(cachePath, out _);
             if (File.Exists(sourcePath)) File.Delete(sourcePath);
+            if (File.Exists(encryptedPath)) File.Delete(encryptedPath);
             if (hasThumbnailSlot) _thumbnailSlots.Release();
         }
     }
@@ -718,7 +754,7 @@ public partial class MainWindow : Window
             long fileLength = fi.Length;
 
             using var fs = new FileStream(localPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, true);
-            using var content = new ProgressStreamContent(fs, UpdateTransferProgress, fileLength);
+            using var content = new EncryptedProgressStreamContent(fs, _encryptionKey, UpdateTransferProgress, fileLength);
 
             string relativePath = Uri.EscapeDataString(GetRemotePath(fileName));
             using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/upload?path={relativePath}")
@@ -765,6 +801,7 @@ public partial class MainWindow : Window
             {
                 string destPath = Path.Combine(folder[0].TryGetLocalPath()!, dto.Nombre);
                 string temporaryPath = destPath + ".nubezero-" + Guid.NewGuid().ToString("N") + ".part";
+                string encryptedTemporaryPath = temporaryPath + ".encrypted";
                 ShowTransfer($"Descargando {dto.Nombre}...");
                 
                 try
@@ -776,7 +813,7 @@ public partial class MainWindow : Window
                     long total = response.Content.Headers.ContentLength ?? -1;
                     long transferred = 0;
                     using var input = await response.Content.ReadAsStreamAsync();
-                    using (var fs = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true))
+                    using (var fs = new FileStream(encryptedTemporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true))
                     {
                         var buffer = new byte[81920];
                         int count;
@@ -792,6 +829,12 @@ public partial class MainWindow : Window
                     if (total >= 0 && transferred != total)
                         throw new IOException("La descarga llegó incompleta.");
 
+                    using (var encrypted = new FileStream(encryptedTemporaryPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                    using (var plaintext = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true))
+                    {
+                        await FileEncryptionService.DecryptAsync(encrypted, plaintext, _encryptionKey);
+                    }
+
                     File.Move(temporaryPath, destPath, true);
                     TxtStatus.Text = "Descarga completada";
                 }
@@ -802,6 +845,7 @@ public partial class MainWindow : Window
                 finally
                 {
                     if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
+                    if (File.Exists(encryptedTemporaryPath)) File.Delete(encryptedTemporaryPath);
                     HideTransfer();
                 }
             }
@@ -878,6 +922,8 @@ public partial class MainWindow : Window
         _token = string.Empty;
         _username = string.Empty;
         _role = "Estandar";
+        Array.Clear(_encryptionKey, 0, _encryptionKey.Length);
+        _encryptionKey = Array.Empty<byte>();
         _currentPath = string.Empty;
 
         if (_httpClient != null)
@@ -893,6 +939,32 @@ public partial class MainWindow : Window
         ChangePasswordView.IsVisible = false;
         MainView.IsVisible = false;
         LoginView.IsVisible = true;
+    }
+
+    private async Task LoadEncryptionKeyAsync()
+    {
+        using var response = await _httpClient.GetAsync("/api/encryption-key");
+        response.EnsureSuccessStatusCode();
+        var result = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
+        string encodedKey = result.GetProperty("key").GetString() ?? string.Empty;
+        byte[] key;
+        try
+        {
+            key = Convert.FromBase64String(encodedKey);
+        }
+        catch (FormatException ex)
+        {
+            throw new InvalidDataException("El servidor devolvió una clave de cifrado inválida.", ex);
+        }
+
+        if (key.Length != 32)
+        {
+            Array.Clear(key, 0, key.Length);
+            throw new InvalidDataException("La clave de cifrado del servidor debe contener 32 bytes.");
+        }
+
+        Array.Clear(_encryptionKey, 0, _encryptionKey.Length);
+        _encryptionKey = key;
     }
 
     #region Gestión de Usuarios (Admin)

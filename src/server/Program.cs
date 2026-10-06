@@ -22,7 +22,8 @@ namespace NubeZero.Server
 
         static async Task Main(string[] args)
         {
-            int port = 8080;
+            int port = 8081;
+            int publicPort = 8080;
             string storagePath = null;
             string serverName = null;
             int discoveryPort = NubeZero.Shared.DiscoveryConstants.DefaultPort;
@@ -33,6 +34,10 @@ namespace NubeZero.Server
                 if (args[i] == "--port" && i + 1 < args.Length && int.TryParse(args[i + 1], out int p))
                 {
                     port = p;
+                }
+                else if (args[i] == "--public-port" && i + 1 < args.Length && int.TryParse(args[i + 1], out int publicPortValue))
+                {
+                    publicPort = publicPortValue;
                 }
                 else if (args[i] == "--storage" && i + 1 < args.Length)
                 {
@@ -52,23 +57,25 @@ namespace NubeZero.Server
                 }
             }
 
-            Console.WriteLine($"Iniciando servidor Nube-Zero en el puerto {port}...");
+            Console.WriteLine($"Iniciando servidor Nube-Zero detrás del proxy TLS en el puerto {publicPort}...");
+            EncryptionService.ValidateConfiguration();
             
             _storageService = new StorageService(storagePath);
+            EncryptionService.MigrateLegacyFiles(_storageService.BasePath);
             _dbContext = new DatabaseContext(storagePath);
             _authController = new AuthController(_dbContext);
             _authInterceptor = new AuthInterceptor(_dbContext);
             _fileTransferQueueService = new FileTransferQueueService();
             _fileController = new FileController(_storageService, _dbContext, _fileTransferQueueService);
             _notesController = new NotesController(_dbContext);
-            _discoveryService = new DiscoveryService(port, serverName, discoveryPort, discoveryKey);
+            _discoveryService = new DiscoveryService(publicPort, serverName, discoveryPort, discoveryKey);
             _discoveryService.Start();
             
             using (HttpListener listener = new HttpListener())
             {
-                listener.Prefixes.Add($"http://+:{port}/");
+                listener.Prefixes.Add($"http://127.0.0.1:{port}/");
                 listener.Start();
-                Console.WriteLine($"Servidor escuchando en el puerto {port}...");
+                Console.WriteLine($"Servidor local escuchando en 127.0.0.1:{port}; HTTPS público en el puerto {publicPort}.");
                 Console.WriteLine($"Directorio de almacenamiento: {_storageService.BasePath}");
 
                 var cts = new CancellationTokenSource();
@@ -107,7 +114,6 @@ namespace NubeZero.Server
                 response.KeepAlive = false;
 
                 Console.WriteLine($"[{request.HttpMethod}] {request.Url.AbsolutePath}");
-                response.AppendHeader("Access-Control-Allow-Origin", "*");
                 // Rate limiting (max 10 req/s per IP)
                 if (!RateLimiter.Allow(request.RemoteEndPoint.Address))
                 {
@@ -147,6 +153,12 @@ namespace NubeZero.Server
                     }
                 }
 
+                if (request.Url.AbsolutePath == "/api/encryption-key" && request.HttpMethod == "GET")
+                {
+                    await _authController.HandleGetEncryptionKeyAsync(context);
+                    return;
+                }
+
                 // Rutas de administración y usuarios
                 if (request.Url.AbsolutePath == "/api/users" && request.HttpMethod == "GET")
                 {
@@ -180,7 +192,7 @@ namespace NubeZero.Server
                 }
                 else if (request.Url.AbsolutePath == "/api/users/password" && request.HttpMethod == "POST")
                 {
-                    await _authController.HandleChangePasswordAsync(context, session.Username, session.Role);
+                    await _authController.HandleChangePasswordAsync(context, session.Username, session.Role, session.Token);
                     return;
                 }
                 else if (request.Url.AbsolutePath == "/api/notes" && request.HttpMethod == "GET")

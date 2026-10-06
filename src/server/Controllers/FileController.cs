@@ -2,12 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Tasks;
 using NubeZero.Shared;
 using NubeZero.Server.Services;
-using System.Security.Cryptography.X509Certificates;
-using NubeZero.Server.Data; // for accessing DB to get user password
 
 namespace NubeZero.Server.Controllers
 {
@@ -78,7 +77,8 @@ namespace NubeZero.Server.Controllers
             }
             catch (Exception ex)
             {
-                await WriteErrorAsync(response, 500, $"Error interno: {ex.Message}");
+                Console.Error.WriteLine($"Error en la operación de archivos: {ex}");
+                await WriteErrorAsync(response, 500, "Error interno del servidor.");
             }
             finally
             {
@@ -122,16 +122,11 @@ namespace NubeZero.Server.Controllers
                     return;
                 }
 
-                // Read encrypted file and decrypt on the fly
                 using var encryptedStream = new FileStream(safePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, true);
-                // The password for decryption should be derived from the session/user; here we use a placeholder
-                string password = GetUserPasswordFromRequest(context.Request);
-                var decryptedBytes = await EncryptionService.DecryptAsync(encryptedStream, password);
-
                 response.ContentType = "application/octet-stream";
-                response.ContentLength64 = decryptedBytes.Length;
-                response.AddHeader("Content-Disposition", $"attachment; filename=\"{Path.GetFileName(safePath)}\"");
-                await response.OutputStream.WriteAsync(decryptedBytes, 0, decryptedBytes.Length);
+                response.ContentLength64 = encryptedStream.Length;
+                response.AddHeader("Content-Disposition", $"attachment; filename*=UTF-8''{Uri.EscapeDataString(Path.GetFileName(safePath))}");
+                await encryptedStream.CopyToAsync(response.OutputStream, 81920);
             }
             catch (UnauthorizedAccessException)
             {
@@ -140,7 +135,7 @@ namespace NubeZero.Server.Controllers
             catch (Exception ex)
             {
                 Console.WriteLine($"Error descarga: {ex.Message}");
-                response.StatusCode = 500;
+                response.Abort();
             }
             finally
             {
@@ -211,16 +206,28 @@ namespace NubeZero.Server.Controllers
                     return;
                 }
 
-                // ----- ENCRYPT BEFORE SAVING -----
-                using var plainStream = new FileStream(temporaryPath, FileMode.Open, FileAccess.Read);
-                string password = GetUserPassword(username);
-                var encryptedBytes = await EncryptionService.EncryptAsync(plainStream, password);
-                await File.WriteAllBytesAsync(safePath, encryptedBytes);
-                // Delete temporary plaintext file
-                File.Delete(temporaryPath);
+                try
+                {
+                    using (var uploadedFile = new FileStream(temporaryPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                        await FileEncryptionService.GetPlaintextLengthAsync(uploadedFile);
+                }
+                catch (CryptographicException)
+                {
+                    await WriteErrorAsync(response, 400, "El archivo recibido no usa el formato cifrado compatible.");
+                    return;
+                }
+
+                if (File.Exists(safePath))
+                {
+                    File.Replace(temporaryPath, safePath, null);
+                }
+                else
+                {
+                    File.Move(temporaryPath, safePath);
+                }
                 temporaryPath = null;
 
-                _dbContext.SaveFileMetadata(safePath, username, encryptedBytes.Length);
+                _dbContext.SaveFileMetadata(safePath, username, receivedLength);
 
                 response.StatusCode = 201;
                 response.ContentType = "application/json";
@@ -286,7 +293,8 @@ namespace NubeZero.Server.Controllers
             }
             catch (Exception ex)
             {
-                await WriteErrorAsync(response, 500, $"Error al borrar: {ex.Message}");
+                Console.Error.WriteLine($"Error al borrar archivo: {ex}");
+                await WriteErrorAsync(response, 500, "Error interno del servidor.");
             }
             finally
             {
@@ -323,7 +331,8 @@ namespace NubeZero.Server.Controllers
             }
             catch (Exception ex)
             {
-                await WriteErrorAsync(response, 500, $"Error al crear carpeta: {ex.Message}");
+                Console.Error.WriteLine($"Error al crear carpeta: {ex}");
+                await WriteErrorAsync(response, 500, "Error interno del servidor.");
             }
             finally
             {
@@ -380,32 +389,13 @@ namespace NubeZero.Server.Controllers
             }
             catch (Exception ex)
             {
-                await WriteErrorAsync(response, 500, $"Error al renombrar: {ex.Message}");
+                Console.Error.WriteLine($"Error al renombrar archivo: {ex}");
+                await WriteErrorAsync(response, 500, "Error interno del servidor.");
             }
             finally
             {
                 response.Close();
             }
-        }
-
-        // Helper to retrieve user password for encryption/decryption
-        private string GetUserPassword(string username)
-        {
-            // TODO: replace with secure secret manager or derived key per session.
-            // Placeholder uses DB context method (must exist) to fetch stored password hash.
-            return _dbContext.GetUserPassword(username) ?? string.Empty;
-        }
-
-        // Helper to obtain password from request (e.g., from session token).
-        private string GetUserPasswordFromRequest(HttpListenerRequest request)
-        {
-            // Placeholder: extract token, map to user, then retrieve password.
-            // In a real implementation, the password would be derived from a secret shared during login.
-            var token = request.Headers["Authorization"]?.Replace("Bearer ", "");
-            if (string.IsNullOrWhiteSpace(token)) return string.Empty;
-            var session = _authInterceptor?.ValidateSession(request);
-            if (session == null) return string.Empty;
-            return GetUserPassword(session.Username);
         }
 
         private async Task WriteErrorAsync(HttpListenerResponse response, int statusCode, string message)
@@ -416,6 +406,7 @@ namespace NubeZero.Server.Controllers
                 response.ContentType = "application/json";
                 string json = JsonSerializer.Serialize(new { error = message });
                 byte[] buffer = System.Text.Encoding.UTF8.GetBytes(json);
+                response.ContentLength64 = buffer.Length;
                 await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
             }
             catch

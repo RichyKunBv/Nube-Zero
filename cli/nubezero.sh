@@ -229,7 +229,7 @@ function show_status_dashboard() {
   echo -e "\n${CYAN}┌──────────────── Estado Actual del Servidor ────────────────┐${NC}"
   echo -e "${CYAN}│${NC}  • Servicio:        $svc_status"
   echo -e "${CYAN}│${NC}  • Nombre en Red:   ${YELLOW}$current_name${NC}"
-  echo -e "${CYAN}│${NC}  • Puerto HTTP:     ${YELLOW}$current_port${NC}"
+  echo -e "${CYAN}│${NC}  • Puerto HTTPS:    ${YELLOW}$current_port${NC}"
   echo -e "${CYAN}│${NC}  • Almacenamiento:  ${YELLOW}$storage_info${NC}"
   echo -e "${CYAN}│${NC}  • Tarjeta MicroSD: $sd_status"
   echo -e "${CYAN}└────────────────────────────────────────────────────────────┘${NC}"
@@ -256,7 +256,7 @@ function menu_change_port() {
   print_header
   local current_port=$(grep "ExecStart" "$SERVICE_FILE" 2>/dev/null | grep -oP '(?<=--port )\d+')
   if [ -z "$current_port" ]; then current_port=8080; fi
-  echo -e "${CYAN}--- Cambiar Puerto HTTP ---${NC}"
+  echo -e "${CYAN}--- Cambiar Puerto HTTPS ---${NC}"
   echo -e "Puerto actual: ${YELLOW}$current_port${NC}"
   echo -ne "Introduce el nuevo puerto [1-65535] (deja vacío para cancelar): "
   read NEW_PORT
@@ -548,6 +548,49 @@ except Exception as e:
   pause_menu
 }
 
+function show_admin_password() {
+  print_header
+  echo -e "${CYAN}--- Contraseña recuperable del administrador ---${NC}"
+
+  local env_file="/etc/nubezero/server.env"
+  local encoded_password=""
+  local recovery_password=""
+
+  if [ -r "$env_file" ]; then
+    encoded_password=$(sed -n 's/^NUBEZERO_INITIAL_ADMIN_PASSWORD_BASE64=//p' "$env_file" | tail -n 1)
+  fi
+
+  if [ -n "$encoded_password" ]; then
+    if recovery_password=$(printf '%s' "$encoded_password" | base64 -d 2>/dev/null) && [ -n "$recovery_password" ]; then
+      echo -e "${GREEN}Contraseña inicial temporal todavía configurada:${NC}"
+      printf '%s\n' "$recovery_password"
+      unset encoded_password recovery_password
+      pause_menu
+      return
+    fi
+    echo -e "${YELLOW}La contraseña temporal existe, pero no se pudo decodificar.${NC}"
+    unset encoded_password recovery_password
+  fi
+
+  if command -v journalctl >/dev/null 2>&1; then
+    recovery_password=$(journalctl -u "$SERVICE_NAME" --no-pager -o cat 2>/dev/null |
+      awk '/^Contraseña de recuperación de admin/{if (getline > 0) found=$0} END{print found}')
+  fi
+
+  if [ -n "$recovery_password" ]; then
+    echo -e "${GREEN}Última contraseña de recuperación generada por el servidor:${NC}"
+    printf '%s\n' "$recovery_password"
+    echo -e "${YELLOW}Guárdala de forma segura y cámbiala después de iniciar sesión.${NC}"
+  else
+    echo -e "${YELLOW}No hay una contraseña en texto claro que se pueda mostrar.${NC}"
+    echo "Las contraseñas guardadas normalmente están protegidas con un hash y no se pueden recuperar."
+    echo "Si la perdiste, usa la opción 6 para restablecerla."
+  fi
+
+  unset encoded_password recovery_password
+  pause_menu
+}
+
 function run_config() {
   while true; do
     clear 2>/dev/null || true
@@ -556,7 +599,7 @@ function run_config() {
 
     echo -e "${YELLOW}Menú de Configuración Modular:${NC}"
     echo "  1) 🏷️  Cambiar Nombre del Servidor en Red"
-    echo "  2) 🌐 Cambiar Puerto HTTP"
+    echo "  2) 🌐 Cambiar Puerto HTTPS"
     echo "  3) 💾 Gestionar Almacenamiento (USB / MicroSD)"
     echo "  4) 🛡️  Gestionar Blindaje MicroSD (Solo Lectura)"
     echo "  5) ⚡ Optimización del Sistema (Headless Extrema)"
@@ -565,9 +608,10 @@ function run_config() {
     echo "  8) 📜 Ver Logs del Servicio en Tiempo Real"
     echo "  9) 🚀 Actualizar SOLO esta herramienta CLI (desde main)"
     echo " 10) 🧰 Reparación rápida del sistema"
+    echo " 11) 👁️  Ver contraseña inicial/de recuperación (si aún está disponible)"
     echo "  0) 🚪 Salir"
     echo ""
-    echo -ne "${CYAN}Selecciona una opción [0-10]: ${NC}"
+    echo -ne "${CYAN}Selecciona una opción [0-11]: ${NC}"
     read -r OPTION
 
     case "$OPTION" in
@@ -590,6 +634,7 @@ function run_config() {
         update_cli
         ;;
       10) menu_system_repair ;;
+      11) show_admin_password ;;
       0|q|Q)
         echo -e "\n${GREEN}Saliendo de la configuración de Nube-Zero.${NC}"
         break
@@ -611,24 +656,37 @@ function update_cli() {
   mount -o remount,rw /boot/firmware 2>/dev/null || true
 
   local tmp_cli
-  tmp_cli=$(mktemp)
+  tmp_cli=$(mktemp) || {
+    echo -e "${RED}Error: no se pudo crear un archivo temporal para actualizar la CLI.${NC}"
+    pause_menu
+    return 1
+  }
   local cli_url="https://raw.githubusercontent.com/RichyKunBv/Nube-Zero/main/cli/nubezero.sh"
 
-  if wget -q "$cli_url" -O "$tmp_cli" 2>/dev/null || curl -sL "$cli_url" -o "$tmp_cli" 2>/dev/null; then
-    if bash -n "$tmp_cli"; then
-      cp "$tmp_cli" /usr/local/bin/nubezero
-      chmod +x /usr/local/bin/nubezero
-      rm -f "$tmp_cli"
-      echo -e "${GREEN}✓ CLI de Nube-Zero actualizada con éxito a la última versión.${NC}"
-      echo -e "${CYAN}Ya estás ejecutando los cambios más recientes sin necesidad de actualizar todo el servidor.${NC}"
-    else
-      echo -e "${RED}Error: El archivo descargado contiene errores de sintaxis. No se aplicaron cambios.${NC}"
-      rm -f "$tmp_cli"
-    fi
-  else
-    echo -e "${RED}Error al descargar la última versión del CLI desde GitHub.${NC}"
+  if ! curl -fSL --show-error "$cli_url" -o "$tmp_cli"; then
+    echo -e "${RED}Error: no se pudo descargar la CLI. No se aplicaron cambios.${NC}"
     rm -f "$tmp_cli"
+    pause_menu
+    return 1
   fi
+
+  if ! bash -n "$tmp_cli"; then
+    echo -e "${RED}Error: la CLI descargada tiene errores de sintaxis. No se aplicaron cambios.${NC}"
+    rm -f "$tmp_cli"
+    pause_menu
+    return 1
+  fi
+
+  if ! install -m 0755 "$tmp_cli" /usr/local/bin/nubezero; then
+    echo -e "${RED}Error: no se pudo instalar la CLI en /usr/local/bin/nubezero.${NC}"
+    rm -f "$tmp_cli"
+    pause_menu
+    return 1
+  fi
+
+  rm -f "$tmp_cli"
+  echo -e "${GREEN}✓ CLI de Nube-Zero actualizada con éxito a la última versión.${NC}"
+  echo -e "${CYAN}Ya estás ejecutando los cambios más recientes sin necesidad de actualizar todo el servidor.${NC}"
   pause_menu
 }
 
@@ -636,12 +694,35 @@ function run_update() {
   print_header
   echo -e "${YELLOW}Actualizando servidor Nube-Zero...${NC}"
   
-  TMP_SCRIPT=$(mktemp)
-  curl -sL https://raw.githubusercontent.com/RichyKunBv/Nube-Zero/main/setup_server.sh -o "$TMP_SCRIPT"
-  chmod +x "$TMP_SCRIPT"
-  
-  "$TMP_SCRIPT" update
-  rm -f "$TMP_SCRIPT"
+  local tmp_script
+  tmp_script=$(mktemp) || {
+    echo -e "${RED}Error: no se pudo crear un archivo temporal para el instalador.${NC}"
+    return 1
+  }
+
+  if ! curl -fSL --show-error https://raw.githubusercontent.com/RichyKunBv/Nube-Zero/main/setup_server.sh -o "$tmp_script"; then
+    echo -e "${RED}Error: no se pudo descargar el instalador del servidor. No se inició la actualización.${NC}"
+    rm -f "$tmp_script"
+    return 1
+  fi
+
+  if ! bash -n "$tmp_script"; then
+    echo -e "${RED}Error: el instalador descargado tiene errores de sintaxis. No se inició la actualización.${NC}"
+    rm -f "$tmp_script"
+    return 1
+  fi
+
+  if bash "$tmp_script" update; then
+    rm -f "$tmp_script"
+    echo -e "${GREEN}✓ El instalador terminó correctamente.${NC}"
+  else
+    local update_status=$?
+    rm -f "$tmp_script"
+    echo -e "${RED}Error: la actualización del servidor terminó con código $update_status.${NC}"
+    echo "Revisa el error mostrado arriba. Para inspeccionar el servicio: sudo systemctl status nubezero --no-pager"
+    echo "Logs recientes del servicio: sudo journalctl -u nubezero -n 80 --no-pager"
+    return "$update_status"
+  fi
 }
 
 case "$1" in

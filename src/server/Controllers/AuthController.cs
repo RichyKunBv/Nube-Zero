@@ -4,12 +4,14 @@ using System.Net;
 using System.Text.Json;
 using System.Threading.Tasks;
 using NubeZero.Server.Data;
+using NubeZero.Server.Services;
 using NubeZero.Shared;
 
 namespace NubeZero.Server.Controllers
 {
     public class AuthController
     {
+        private const int MaximumRequestBodyBytes = 65536;
         private readonly DatabaseContext _dbContext;
 
         public AuthController(DatabaseContext dbContext)
@@ -30,8 +32,7 @@ namespace NubeZero.Server.Controllers
                     return;
                 }
 
-                using var reader = new StreamReader(request.InputStream, request.ContentEncoding);
-                string jsonBody = await reader.ReadToEndAsync();
+                string jsonBody = await ReadRequestBodyAsync(request);
 
                 var loginData = JsonSerializer.Deserialize<LoginRequest>(jsonBody, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
@@ -49,11 +50,9 @@ namespace NubeZero.Server.Controllers
                     return;
                 }
 
-                // Generate JWT token
-                var jwtToken = JwtService.GenerateToken(session.Username, session.Role);
                 var result = new
                 {
-                    token = jwtToken,
+                    token = session.Token,
                     username = session.Username,
                     role = session.Role
                 };
@@ -61,14 +60,35 @@ namespace NubeZero.Server.Controllers
                 byte[] buffer = System.Text.Encoding.UTF8.GetBytes(json);
                 await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
             }
+            catch (RequestBodyTooLargeException)
+            {
+                await WriteErrorAsync(response, 413, "El cuerpo de la solicitud supera el límite permitido.");
+            }
+            catch (JsonException)
+            {
+                await WriteErrorAsync(response, 400, "El JSON de la solicitud no es válido.");
+            }
             catch (Exception ex)
             {
-                await WriteErrorAsync(response, 500, $"Error interno: {ex.Message}");
+                Console.Error.WriteLine($"Error al iniciar sesión: {ex}");
+                await WriteErrorAsync(response, 500, "Error interno del servidor.");
             }
             finally
             {
                 response.Close();
             }
+        }
+
+        public async Task HandleGetEncryptionKeyAsync(HttpListenerContext context)
+        {
+            var response = context.Response;
+            byte[] buffer = System.Text.Encoding.UTF8.GetBytes(
+                JsonSerializer.Serialize(new { key = EncryptionService.GetMasterKeyForClient() }));
+            response.StatusCode = 200;
+            response.ContentType = "application/json";
+            response.ContentLength64 = buffer.Length;
+            await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
+            response.Close();
         }
 
         public async Task HandleListUsersAsync(HttpListenerContext context)
@@ -85,7 +105,8 @@ namespace NubeZero.Server.Controllers
             }
             catch (Exception ex)
             {
-                await WriteErrorAsync(response, 500, $"Error al listar usuarios: {ex.Message}");
+                Console.Error.WriteLine($"Error al listar usuarios: {ex}");
+                await WriteErrorAsync(response, 500, "Error interno del servidor.");
             }
             finally
             {
@@ -106,8 +127,7 @@ namespace NubeZero.Server.Controllers
                     return;
                 }
 
-                using var reader = new StreamReader(request.InputStream, request.ContentEncoding);
-                string jsonBody = await reader.ReadToEndAsync();
+                string jsonBody = await ReadRequestBodyAsync(request);
 
                 var registerData = JsonSerializer.Deserialize<CreateUserRequest>(jsonBody, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
@@ -130,9 +150,18 @@ namespace NubeZero.Server.Controllers
                 byte[] buffer = System.Text.Encoding.UTF8.GetBytes("{\"message\": \"Usuario creado exitosamente\"}");
                 await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
             }
+            catch (RequestBodyTooLargeException)
+            {
+                await WriteErrorAsync(response, 413, "El cuerpo de la solicitud supera el límite permitido.");
+            }
+            catch (JsonException)
+            {
+                await WriteErrorAsync(response, 400, "El JSON de la solicitud no es válido.");
+            }
             catch (Exception ex)
             {
-                await WriteErrorAsync(response, 500, $"Error interno: {ex.Message}");
+                Console.Error.WriteLine($"Error al crear usuario: {ex}");
+                await WriteErrorAsync(response, 500, "Error interno del servidor.");
             }
             finally
             {
@@ -180,7 +209,8 @@ namespace NubeZero.Server.Controllers
             }
             catch (Exception ex)
             {
-                await WriteErrorAsync(response, 500, $"Error interno: {ex.Message}");
+                Console.Error.WriteLine($"Error al eliminar usuario: {ex}");
+                await WriteErrorAsync(response, 500, "Error interno del servidor.");
             }
             finally
             {
@@ -188,7 +218,7 @@ namespace NubeZero.Server.Controllers
             }
         }
 
-        public async Task HandleChangePasswordAsync(HttpListenerContext context, string loggedInUsername, string loggedInRole)
+        public async Task HandleChangePasswordAsync(HttpListenerContext context, string loggedInUsername, string loggedInRole, string currentSessionToken)
         {
             var request = context.Request;
             var response = context.Response;
@@ -201,8 +231,7 @@ namespace NubeZero.Server.Controllers
                     return;
                 }
 
-                using var reader = new StreamReader(request.InputStream, request.ContentEncoding);
-                string jsonBody = await reader.ReadToEndAsync();
+                string jsonBody = await ReadRequestBodyAsync(request);
 
                 var passData = JsonSerializer.Deserialize<ChangePasswordRequest>(jsonBody, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                 if (passData == null || string.IsNullOrWhiteSpace(passData.NewPassword))
@@ -232,7 +261,7 @@ namespace NubeZero.Server.Controllers
                     }
                 }
 
-                bool success = _dbContext.ChangePassword(targetUser, passData.NewPassword);
+                bool success = _dbContext.ChangePassword(targetUser, passData.NewPassword, currentSessionToken);
                 if (!success)
                 {
                     await WriteErrorAsync(response, 400, "No se pudo actualizar la contraseña.");
@@ -244,9 +273,18 @@ namespace NubeZero.Server.Controllers
                 byte[] buffer = System.Text.Encoding.UTF8.GetBytes("{\"message\": \"Contraseña actualizada exitosamente\"}");
                 await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
             }
+            catch (RequestBodyTooLargeException)
+            {
+                await WriteErrorAsync(response, 413, "El cuerpo de la solicitud supera el límite permitido.");
+            }
+            catch (JsonException)
+            {
+                await WriteErrorAsync(response, 400, "El JSON de la solicitud no es válido.");
+            }
             catch (Exception ex)
             {
-                await WriteErrorAsync(response, 500, $"Error interno: {ex.Message}");
+                Console.Error.WriteLine($"Error al cambiar la contraseña: {ex}");
+                await WriteErrorAsync(response, 500, "Error interno del servidor.");
             }
             finally
             {
@@ -267,6 +305,32 @@ namespace NubeZero.Server.Controllers
             catch
             {
             }
+        }
+
+        private static async Task<string> ReadRequestBodyAsync(HttpListenerRequest request)
+        {
+            if (request.ContentLength64 > MaximumRequestBodyBytes)
+                throw new RequestBodyTooLargeException();
+
+            using (var body = new MemoryStream())
+            {
+                byte[] buffer = new byte[4096];
+                int total = 0;
+                int read;
+                while ((read = await request.InputStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                {
+                    if (total > MaximumRequestBodyBytes - read)
+                        throw new RequestBodyTooLargeException();
+                    body.Write(buffer, 0, read);
+                    total += read;
+                }
+
+                return request.ContentEncoding.GetString(body.ToArray());
+            }
+        }
+
+        private sealed class RequestBodyTooLargeException : Exception
+        {
         }
 
         private class LoginRequest

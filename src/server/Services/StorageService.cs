@@ -40,13 +40,28 @@ namespace NubeZero.Server.Services
             requestedRelativePath = requestedRelativePath.TrimStart('/', '\\');
             
             // Combinar la ruta base con la solicitada
-            string fullPath = Path.GetFullPath(Path.Combine(_baseStoragePath, requestedRelativePath));
+            string rootPath = Path.GetFullPath(_baseStoragePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string fullPath = Path.GetFullPath(Path.Combine(rootPath, requestedRelativePath));
 
-            // Verificación estricta de Path Traversal
-            // Asegurar que la ruta resuelta empieza EXACTAMENTE por nuestra ruta base
-            if (!fullPath.StartsWith(_baseStoragePath, StringComparison.OrdinalIgnoreCase))
+            StringComparison comparison = Path.DirectorySeparatorChar == '\\'
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            string rootPrefix = rootPath + Path.DirectorySeparatorChar;
+            if (!string.Equals(fullPath, rootPath, comparison) && !fullPath.StartsWith(rootPrefix, comparison))
             {
                 throw new UnauthorizedAccessException("Intento de Path Traversal detectado y bloqueado.");
+            }
+
+            string relativePath = fullPath.Length == rootPath.Length
+                ? string.Empty
+                : fullPath.Substring(rootPrefix.Length);
+            string currentPath = rootPath;
+            foreach (string segment in relativePath.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                currentPath = Path.Combine(currentPath, segment);
+                if ((File.Exists(currentPath) || Directory.Exists(currentPath))
+                    && (File.GetAttributes(currentPath) & FileAttributes.ReparsePoint) != 0)
+                    throw new UnauthorizedAccessException("No se permiten enlaces simbólicos dentro del almacenamiento.");
             }
 
             return fullPath;

@@ -53,26 +53,15 @@ public class MainActivity : MauiAppCompatActivity
         return completion.Task;
     }
 
-    public async Task CopyToSaveDestinationAsync(Android.Net.Uri destination, System.IO.Stream source, long total, Action<long, long> progress)
+    public async Task CopyDecryptedToSaveDestinationAsync(Android.Net.Uri destination, System.IO.Stream encryptedSource, byte[] key, long total, Action<long, long> progress)
     {
         try
         {
             using var output = ContentResolver?.OpenOutputStream(destination, "w")
                 ?? throw new InvalidOperationException("Android no pudo abrir el destino seleccionado.");
-            long transferred = 0;
-            var buffer = new byte[81920];
-            int count;
-            while ((count = await source.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false)) > 0)
-            {
-                await output.WriteAsync(buffer, 0, count).ConfigureAwait(false);
-                transferred += count;
-                progress?.Invoke(transferred, total);
-            }
-
-            if (total >= 0 && transferred != total)
-                throw new IOException("La descarga llegó incompleta.");
-
+            await NubeZero.Shared.FileEncryptionService.DecryptAsync(encryptedSource, output, key).ConfigureAwait(false);
             await output.FlushAsync().ConfigureAwait(false);
+            progress?.Invoke(total, total);
         }
         catch
         {
@@ -116,20 +105,24 @@ public class MainActivity : MauiAppCompatActivity
 
     private async void HandleSharedFileAsync(Android.Net.Uri uri)
     {
+        string sharedFilePath = string.Empty;
+        bool isTemporaryFile = false;
         try
         {
             // Necesitamos esperar que la UI esté lista
             await Task.Delay(1500);
 
-            var path = GetPathFromUri(uri);
-            var filename = GetFileNameFromUri(uri);
+            (sharedFilePath, isTemporaryFile) = GetPathFromUri(uri);
+            var filename = System.IO.Path.GetFileName(GetFileNameFromUri(uri).Replace('\\', '/'));
+            if (string.IsNullOrWhiteSpace(filename))
+                filename = "shared-file";
 
-            if (!string.IsNullOrEmpty(path))
+            if (!string.IsNullOrEmpty(sharedFilePath))
             {
                 var mainPage = App.Current?.MainPage as MainPage;
                 if (mainPage != null)
                 {
-                    await mainPage.UploadFileAsync(path, filename);
+                    await mainPage.UploadFileAsync(sharedFilePath, filename);
                 }
             }
         }
@@ -137,25 +130,58 @@ public class MainActivity : MauiAppCompatActivity
         {
             System.Console.WriteLine($"Error al procesar archivo compartido: {ex.Message}");
         }
+        finally
+        {
+            if (isTemporaryFile && System.IO.File.Exists(sharedFilePath))
+            {
+                try
+                {
+                    System.IO.File.Delete(sharedFilePath);
+                }
+                catch (System.Exception ex)
+                {
+                    System.Console.Error.WriteLine($"No se pudo eliminar la copia temporal sin cifrar: {ex.Message}");
+                }
+            }
+        }
     }
 
-    private string GetPathFromUri(Android.Net.Uri uri)
+    private (string Path, bool IsTemporary) GetPathFromUri(Android.Net.Uri uri)
     {
-        if (uri.Scheme == "file") return uri.Path ?? string.Empty;
+        if (uri.Scheme == "file") return (uri.Path ?? string.Empty, false);
 
         using var cursor = ContentResolver?.Query(uri, null, null, null, null);
         if (cursor != null && cursor.MoveToFirst())
         {
             int index = cursor.GetColumnIndex(Android.Provider.MediaStore.MediaColumns.Data);
-            if (index != -1) return cursor.GetString(index) ?? string.Empty;
+            if (index != -1)
+            {
+                string? path = cursor.GetString(index);
+                if (!string.IsNullOrWhiteSpace(path))
+                    return (path, false);
+            }
         }
 
         // Si es un content:// que no expone Data, hay que copiarlo a Cache (Workaround clásico en Android)
-        var tempFile = System.IO.Path.Combine(CacheDir!.AbsolutePath, GetFileNameFromUri(uri));
-        using var inStream = ContentResolver?.OpenInputStream(uri);
-        using var outStream = new System.IO.FileStream(tempFile, System.IO.FileMode.Create);
-        inStream?.CopyTo(outStream);
-        return tempFile;
+        string fileName = System.IO.Path.GetFileName(GetFileNameFromUri(uri));
+        if (string.IsNullOrWhiteSpace(fileName))
+            fileName = "shared-file";
+        string tempFile = System.IO.Path.Combine(CacheDir!.AbsolutePath,
+            "nubezero-share-" + System.Guid.NewGuid().ToString("N") + "-" + fileName);
+        try
+        {
+            using var inStream = ContentResolver?.OpenInputStream(uri)
+                ?? throw new System.IO.IOException("Android no pudo abrir el archivo compartido.");
+            using var outStream = new System.IO.FileStream(tempFile, System.IO.FileMode.CreateNew, System.IO.FileAccess.Write);
+            inStream.CopyTo(outStream);
+            return (tempFile, true);
+        }
+        catch
+        {
+            if (System.IO.File.Exists(tempFile))
+                System.IO.File.Delete(tempFile);
+            throw;
+        }
     }
 
     private string GetFileNameFromUri(Android.Net.Uri uri)

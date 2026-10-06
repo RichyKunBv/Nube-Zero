@@ -42,7 +42,8 @@ namespace NubeZero.Server.Controllers
             }
             catch (Exception ex)
             {
-                await WriteErrorAsync(response, 500, $"Error al obtener notas: {ex.Message}");
+                Console.Error.WriteLine($"Error al obtener notas: {ex}");
+                await WriteErrorAsync(response, 500, "Error interno del servidor.");
             }
         }
 
@@ -101,7 +102,8 @@ namespace NubeZero.Server.Controllers
             }
             catch (Exception ex)
             {
-                await WriteErrorAsync(response, 500, $"Error al guardar nota: {ex.Message}");
+                Console.Error.WriteLine($"Error al guardar nota: {ex}");
+                await WriteErrorAsync(response, 500, "Error interno del servidor.");
             }
         }
 
@@ -134,7 +136,8 @@ namespace NubeZero.Server.Controllers
             }
             catch (Exception ex)
             {
-                await WriteErrorAsync(response, 500, $"Error al eliminar nota: {ex.Message}");
+                Console.Error.WriteLine($"Error al eliminar nota: {ex}");
+                await WriteErrorAsync(response, 500, "Error interno del servidor.");
             }
         }
 

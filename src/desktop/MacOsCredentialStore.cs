@@ -72,7 +72,7 @@ internal static class MacOsCredentialStore
         }
     }
 
-    internal static void Save(string serverUrl, string username, string password)
+    internal static void Save(string serverUrl, string username, string password, string certificateFingerprint)
     {
         Delete();
 
@@ -80,7 +80,8 @@ internal static class MacOsCredentialStore
         {
             ServerUrl = serverUrl,
             Username = username,
-            Password = password
+            Password = password,
+            CertificateFingerprint = certificateFingerprint
         });
 
         int status = SecKeychainAddGenericPassword(
@@ -140,4 +141,5 @@ internal sealed class SavedMacCredentials
     public string ServerUrl { get; set; } = string.Empty;
     public string Username { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
+    public string CertificateFingerprint { get; set; } = string.Empty;
 }

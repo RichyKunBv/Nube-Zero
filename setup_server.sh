@@ -9,6 +9,11 @@ REPO_NAME="Nube-Zero"
 INSTALL_DIR="/opt/nubezero"
 BIN_DIR="$INSTALL_DIR/bin"
 SERVICE_FILE="/etc/systemd/system/nubezero.service"
+TLS_SERVICE_FILE="/etc/systemd/system/nubezero-tls.service"
+CONFIG_DIR="/etc/nubezero"
+TLS_DIR="$CONFIG_DIR/tls"
+SERVER_ENV_FILE="$CONFIG_DIR/server.env"
+NUBEZERO_USER="nubezero"
 
 # Colores
 GREEN='\033[0;32m'
@@ -39,35 +44,21 @@ function print_warn() {
 
 function check_multiple_installations() {
   print_msg "Verificando si existen múltiples instalaciones de Nube-Zero..."
-  
-  # Buscar en ubicaciones donde un usuario típicamente podría haber copiado los archivos
-  # Ignoramos /opt/nubezero que es la ruta principal.
-  # Limitamos a /home, /mnt, y /media para no demorar demasiado.
+
   FOUND_EXTRAS=$(find /home /mnt /media /usr/local -type f -name "NubeZero.Server.exe" 2>/dev/null)
   
   if [ -n "$FOUND_EXTRAS" ]; then
-    print_warn "¡ATENCIÓN! Se han detectado otras instalaciones (o backups) de Nube-Zero en tu sistema:"
+    print_warn "Se detectaron otras instalaciones o copias. No se eliminará ningún archivo automáticamente:"
     echo "$FOUND_EXTRAS" | while read -r line; do
         echo -e "${RED}- $line${NC}"
     done
-    
-    print_warn "Se procederá a ELIMINAR automáticamente estas instalaciones adicionales para evitar conflictos..."
-    echo "$FOUND_EXTRAS" | while read -r file_path; do
-      DIR_TO_REMOVE=$(dirname "$file_path")
-      if [[ "$DIR_TO_REMOVE" == *"/bin" ]]; then
-          DIR_TO_REMOVE=$(dirname "$DIR_TO_REMOVE")
-      fi
-      echo "Eliminando: $DIR_TO_REMOVE"
-      rm -rf "$DIR_TO_REMOVE"
-    done
-    print_msg "Instalaciones adicionales eliminadas con éxito."
   else
     echo "Todo en orden (Instalación única detectada)."
   fi
 }
 
 function install_dependencies() {
-  print_msg "Verificando e instalando dependencias (curl, unzip, mono)..."
+  print_msg "Verificando e instalando dependencias (curl, unzip, mono, openssl, stunnel)..."
   
   # Limpiar repositorios problemáticos de Mono si fueron agregados por versiones anteriores o tutoriales viejos
   print_warn "Buscando y deshabilitando repositorios rotos de Mono en el sistema..."
@@ -81,7 +72,7 @@ function install_dependencies() {
   rm -f /etc/apt/keyrings/mono-official-archive-keyring.gpg || true
   
   apt-get update -y
-  apt-get install -y curl unzip
+  apt-get install -y curl unzip openssl stunnel4
   
   if ! command -v mono &> /dev/null; then
     print_warn "Mono no encontrado. Intentando instalar desde los repositorios oficiales de tu sistema..."
@@ -101,7 +92,9 @@ function fetch_and_install() {
   print_msg "Descargando servidor Nube-Zero de la última Release..."
   
   # Obtenemos la URL del NubeZero-Server.zip
-  ASSET_URL=$(curl -s "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest" | grep '"browser_download_url":' | grep 'NubeZero-Server.zip' | cut -d '"' -f 4)
+  local release_response
+  release_response=$(curl -fsSL --show-error "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest")
+  ASSET_URL=$(printf '%s\n' "$release_response" | grep '"browser_download_url":' | grep 'NubeZero-Server.zip' | cut -d '"' -f 4)
   
   if [ -z "$ASSET_URL" ]; then
     echo -e "${RED}ERROR: No se pudo encontrar 'NubeZero-Server.zip' en la última release de GitHub.${NC}"
@@ -112,7 +105,7 @@ function fetch_and_install() {
   TMP_DIR=$(mktemp -d)
   cd "$TMP_DIR"
   
-  curl -L "$ASSET_URL" -o NubeZero-Server.zip
+  curl -fSL --show-error "$ASSET_URL" -o NubeZero-Server.zip
   unzip -q NubeZero-Server.zip -d extracted
   
   print_msg "Instalando binarios..."
@@ -148,10 +141,103 @@ function fetch_and_install() {
 function setup_systemd() {
   local port=$1
   local name=$2
+  local storage_path=$3
+  local storage_argument=""
   if [ -z "$name" ]; then
     name=$(hostname)
   fi
-  print_msg "Configurando servicio Systemd (Puerto $port, Nombre: $name)..."
+  if ! [[ "$name" =~ ^[a-zA-Z0-9._\ -]{1,64}$ ]]; then
+    echo -e "${RED}ERROR: El nombre del servidor solo puede contener letras, números, espacios, puntos, guiones y guiones bajos.${NC}"
+    return 1
+  fi
+  if [ -n "$storage_path" ]; then
+    if [[ "$storage_path" != /* || "$storage_path" == *'"'* || "$storage_path" == *'\'* || "$storage_path" == *'%'* || "$storage_path" == *$'\n'* ]]; then
+      echo -e "${RED}ERROR: La ruta de almacenamiento conservada no es segura para systemd.${NC}"
+      return 1
+    fi
+    storage_argument=" --storage \"$storage_path\""
+  fi
+  print_msg "Configurando servidor local y proxy HTTPS (Puerto público $port, Nombre: $name)..."
+
+  if ! id -u "$NUBEZERO_USER" >/dev/null 2>&1; then
+    useradd --system --home-dir "$INSTALL_DIR" --no-create-home --shell /usr/sbin/nologin "$NUBEZERO_USER"
+  fi
+
+  install -d -o "$NUBEZERO_USER" -g "$NUBEZERO_USER" -m 0750 "$INSTALL_DIR"
+  install -d -o "$NUBEZERO_USER" -g "$NUBEZERO_USER" -m 0750 "$INSTALL_DIR/Storage"
+  if [ -f "$INSTALL_DIR/database.json" ]; then
+    chown "$NUBEZERO_USER:$NUBEZERO_USER" "$INSTALL_DIR/database.json"
+    chmod 0600 "$INSTALL_DIR/database.json"
+  fi
+  if [ -d "$INSTALL_DIR/Storage" ]; then
+    find "$INSTALL_DIR/Storage" -type d -exec chown "$NUBEZERO_USER:$NUBEZERO_USER" {} +
+  fi
+
+  install -d -o root -g root -m 0750 "$CONFIG_DIR"
+  install -d -o root -g root -m 0700 "$TLS_DIR"
+  local encryption_key=""
+  if [ ! -f "$SERVER_ENV_FILE" ] || ! grep -q '^NUBEZERO_FILE_ENCRYPTION_KEY=' "$SERVER_ENV_FILE"; then
+    encryption_key=$(openssl rand -base64 32)
+    printf 'NUBEZERO_FILE_ENCRYPTION_KEY=%s\n' "$encryption_key" >> "$SERVER_ENV_FILE"
+    echo "Clave de cifrado del servidor (guárdala ahora en un gestor de contraseñas; no se volverá a mostrar):"
+    echo "$encryption_key"
+  fi
+
+  if { [ ! -f "$INSTALL_DIR/database.json" ] || ! grep -qi '"Username"[[:space:]]*:[[:space:]]*"admin"' "$INSTALL_DIR/database.json"; } \
+    && ! grep -q '^NUBEZERO_INITIAL_ADMIN_PASSWORD_BASE64=' "$SERVER_ENV_FILE"; then
+    local admin_password=""
+    local admin_password_confirmation=""
+    while [ "${#admin_password}" -lt 12 ] || [ "$admin_password" != "$admin_password_confirmation" ]; do
+      read -r -s -p "Introduce la contraseña inicial de admin (mínimo 12 caracteres): " admin_password
+      echo
+      if [ "${#admin_password}" -lt 12 ]; then
+        print_warn "La contraseña debe tener al menos 12 caracteres."
+        admin_password=""
+        continue
+      fi
+      read -r -s -p "Confirma la contraseña inicial: " admin_password_confirmation
+      echo
+      if [ "$admin_password" != "$admin_password_confirmation" ]; then
+        print_warn "Las contraseñas no coinciden."
+        admin_password=""
+      fi
+    done
+    local encoded_admin_password
+    encoded_admin_password=$(printf '%s' "$admin_password" | base64 | tr -d '\n')
+    printf 'NUBEZERO_INITIAL_ADMIN_PASSWORD_BASE64=%s\n' "$encoded_admin_password" >> "$SERVER_ENV_FILE"
+    unset admin_password admin_password_confirmation encoded_admin_password
+  fi
+  chown root:root "$SERVER_ENV_FILE"
+  chmod 0600 "$SERVER_ENV_FILE"
+
+  if [ ! -f "$TLS_DIR/server.crt" ] || [ ! -f "$TLS_DIR/server.key" ]; then
+    openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 3650 \
+      -keyout "$TLS_DIR/server.key" \
+      -out "$TLS_DIR/server.crt" \
+      -subj "/CN=Nube-Zero local server" \
+      -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+    chmod 0600 "$TLS_DIR/server.key"
+    chmod 0644 "$TLS_DIR/server.crt"
+  fi
+  cat "$TLS_DIR/server.crt" "$TLS_DIR/server.key" > "$TLS_DIR/server.pem"
+  chown root:"$NUBEZERO_USER" "$TLS_DIR/server.pem"
+  chmod 0640 "$TLS_DIR/server.pem"
+
+  local fingerprint
+  fingerprint=$(openssl x509 -in "$TLS_DIR/server.crt" -noout -fingerprint -sha256 | cut -d= -f2)
+  cat <<EOF > "$CONFIG_DIR/stunnel.conf"
+foreground = yes
+setuid = $NUBEZERO_USER
+setgid = $NUBEZERO_USER
+cert = $TLS_DIR/server.pem
+sslVersionMin = TLSv1.2
+
+[nubezero]
+accept = 0.0.0.0:$port
+connect = 127.0.0.1:8081
+EOF
+  chown root:"$NUBEZERO_USER" "$CONFIG_DIR/stunnel.conf"
+  chmod 0640 "$CONFIG_DIR/stunnel.conf"
   
   cat <<EOF > "$SERVICE_FILE"
 [Unit]
@@ -160,11 +246,36 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
+User=$NUBEZERO_USER
+Group=$NUBEZERO_USER
+EnvironmentFile=$SERVER_ENV_FILE
 WorkingDirectory=$INSTALL_DIR
-ExecStart=/usr/bin/mono $BIN_DIR/NubeZero.Server.exe --port $port --name "$name"
+ExecStart=/usr/bin/mono $BIN_DIR/NubeZero.Server.exe --port 8081 --public-port $port --name "$name"$storage_argument
 Restart=always
 RestartSec=10
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=$INSTALL_DIR
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  cat <<EOF > "$TLS_SERVICE_FILE"
+[Unit]
+Description=Nube-Zero HTTPS/TLS proxy
+After=network.target nubezero.service
+Requires=nubezero.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/stunnel4 $CONFIG_DIR/stunnel.conf
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
 
 [Install]
 WantedBy=multi-user.target
@@ -172,9 +283,31 @@ EOF
 
   systemctl daemon-reload
   systemctl enable nubezero
-  systemctl start nubezero
+  systemctl restart nubezero
+  if grep -q '^NUBEZERO_INITIAL_ADMIN_PASSWORD_BASE64=' "$SERVER_ENV_FILE"; then
+    local attempt
+    for attempt in $(seq 1 60); do
+      if grep -qi '"Username"[[:space:]]*:[[:space:]]*"admin"' "$INSTALL_DIR/database.json" 2>/dev/null; then
+        break
+      fi
+      sleep 1
+    done
+    if grep -qi '"Username"[[:space:]]*:[[:space:]]*"admin"' "$INSTALL_DIR/database.json" 2>/dev/null; then
+      sed -i '/^NUBEZERO_INITIAL_ADMIN_PASSWORD_BASE64=/d' "$SERVER_ENV_FILE"
+      chown root:root "$SERVER_ENV_FILE"
+      chmod 0600 "$SERVER_ENV_FILE"
+      systemctl restart nubezero
+      print_msg "Se eliminó la contraseña inicial temporal de la configuración del servicio."
+    else
+      print_warn "No se pudo confirmar la creación del usuario inicial. La contraseña temporal permanece protegida en $SERVER_ENV_FILE."
+    fi
+  fi
+  systemctl enable nubezero-tls
+  systemctl restart nubezero-tls
   
   print_msg "¡Nube-Zero instalado y ejecutándose exitosamente!"
+  echo "Huella SHA-256 del certificado (verifícala por SSH antes de introducirla en los clientes):"
+  echo "$fingerprint"
   echo "Puedes ver los logs con: journalctl -u nubezero -f"
 }
 
@@ -190,10 +323,14 @@ function action_install() {
   if [ -z "$PORT_INPUT" ]; then
     PORT_INPUT=8080
   fi
+  if ! [[ "$PORT_INPUT" =~ ^[0-9]+$ ]] || [ "$PORT_INPUT" -lt 1024 ] || [ "$PORT_INPUT" -gt 65535 ]; then
+    echo -e "${RED}ERROR: El puerto debe ser un número entre 1024 y 65535.${NC}"
+    exit 1
+  fi
   
   install_dependencies
   fetch_and_install
-  setup_systemd "$PORT_INPUT" "$NAME_INPUT"
+  setup_systemd "$PORT_INPUT" "$NAME_INPUT" ""
   
   check_multiple_installations
 }
@@ -213,7 +350,7 @@ function action_update() {
     exit 1
   fi
 
-  CURRENT_PORT=$(printf '%s\n' "$exec_start" | sed -nE 's/.*--port ([0-9]+).*/\1/p')
+  CURRENT_PORT=$(printf '%s\n' "$exec_start" | sed -nE 's/.*--public-port ([0-9]+).*/\1/p')
   if [ -z "$CURRENT_PORT" ]; then
     CURRENT_PORT=8080
   fi
@@ -225,21 +362,8 @@ function action_update() {
   fi
   
   # Forzar que el sistema siempre apunte a la ruta de instalación oficial
-  NEW_EXEC_START="ExecStart=/usr/bin/mono $INSTALL_DIR/bin/NubeZero.Server.exe --port $CURRENT_PORT"
-  if [ -n "$CURRENT_STORAGE" ]; then
-      NEW_EXEC_START="$NEW_EXEC_START --storage $CURRENT_STORAGE"
-  fi
-  if [ -n "$CURRENT_NAME" ]; then
-      NEW_EXEC_START="$NEW_EXEC_START --name \"$CURRENT_NAME\""
-  fi
-  sed -i "s|ExecStart=.*|$NEW_EXEC_START|g" "$SERVICE_FILE"
-  systemctl daemon-reload
-  
-  systemctl stop nubezero
-  
   fetch_and_install
-  
-  systemctl start nubezero
+  setup_systemd "$CURRENT_PORT" "$CURRENT_NAME" "$CURRENT_STORAGE"
   print_msg "¡Nube-Zero actualizado a la última versión (Puerto $CURRENT_PORT)!"
   
   check_multiple_installations

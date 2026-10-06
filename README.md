@@ -1,6 +1,6 @@
 # Nube-Zero ☁️
 
-[![Versión](https://img.shields.io/badge/Versión-v0.7.4-blue.svg)](https://github.com/RichyKunBv/Nube-Zero)
+[![Versión](https://img.shields.io/badge/Versión-v0.7.5-blue.svg)](https://github.com/RichyKunBv/Nube-Zero)
 [![Status](https://img.shields.io/badge/Estado-Desarrollo-yellow.svg)](https://github.com/RichyKunBv/Nube-Zero)
 [![Licencia](https://img.shields.io/badge/Licencia-Apache_2.0-orange.svg)](https://github.com/RichyKunBv/Nube-Zero/blob/main/LICENSE)
 ---
@@ -20,6 +20,7 @@
 - 🔄 **Actualización desde el cliente (v0.7.1)**: comprueba GitHub y abre el instalador de la plataforma; en Android descarga el APK y solicita confirmación al instalador del sistema.
 - 📏 **Tamaños de archivo claros**: la interfaz etiqueta KiB/MiB/GiB para indicar explícitamente que convierte usando base 1024.
 - 📊 **Transferencias más claras y seguras (v0.7.4)**: progreso de subida/descarga, cola FIFO compartida para limitar a una transferencia activa, sesiones extendidas durante operaciones largas y publicación de archivos solo después de verificar su recepción completa.
+- 🔐 **Seguridad de transporte y archivos (v0.7.5)**: HTTPS obligatorio con certificado local fijado por huella SHA-256, cifrado autenticado en streaming desde los clientes y almacenamiento de archivos cifrados en el servidor. Las contraseñas usan PBKDF2-SHA256 con sal y las sesiones usan tokens aleatorios.
 - 🗂️ **Navegación y vistas previas (v0.7.4)**: navegación por carpetas, iconos por tipo y miniaturas de imágenes generadas y cacheadas en los clientes. Los primeros fotogramas de video se generan localmente para clips de hasta 32 MiB; en escritorio se requiere `ffmpeg` disponible en el sistema.
 - 🔍 **Descubrimiento Automático Silencioso (v0.6.0)**: Encuentra tus servidores Nube-Zero en la red local bajo demanda con un solo clic (`🔍`). Funciona mediante un protocolo reactivo *Probe-Response* por UDP con clave de autenticación: **cero saturación de Wi-Fi, cero pings continuos y 0% de uso de CPU en reposo**.
 - 🏷️ **Soporte Multi-servidor y Nombres Personalizados**: Cada Raspberry Pi puede tener su propio nombre identificador (`--name "Mi Servidor"`), facilitando elegir entre múltiples servidores desde la pantalla de inicio de los clientes.
@@ -61,7 +62,23 @@ sudo bash setup_server.sh
 
 *(Recuerda ejecutarlo con permisos de administrador o `sudo`)*
 
-El asistente te solicitará definir un **nombre identificador amigable** para tu servidor en la red (ej. *PiZero-Sala*) y el puerto HTTP deseado.
+El asistente solicitará un **nombre identificador** (por ejemplo, *PiZero-Sala*), el puerto HTTPS público y, durante una instalación nueva, una contraseña de administrador de al menos 12 caracteres. También generará una clave aleatoria de cifrado de 32 bytes y la mostrará una sola vez.
+
+En la primera conexión, introduce la huella SHA-256 que el instalador muestra al final y verifícala por SSH antes de confiar en ella. No aceptes una huella enviada únicamente por la propia conexión de red.
+
+**La clave de cifrado es administrada por el servidor y se entrega a usuarios autenticados por HTTPS fijado** para que sus clientes cifren y descifren archivos localmente. Esto no es cifrado de extremo a extremo (E2E): el servidor administra la clave y podría leer los archivos. Protege y respalda la clave que el instalador muestra una sola vez; perderla o cambiarla hace irrecuperables los archivos. En el primer inicio de la versión nueva, el servidor migra automáticamente los archivos existentes a formato cifrado; mantén una copia de seguridad y espacio libre suficiente. Los clientes anteriores que no soporten HTTPS fijado y el formato nuevo no podrán conectarse ni leer los archivos.
+
+El servicio de aplicación escucha únicamente en `127.0.0.1`; `stunnel` publica HTTPS en el puerto elegido. No expongas el puerto interno `8081`. Las credenciales iniciales se solicitan durante la instalación y se eliminan del archivo de entorno después de crear la cuenta. En instalaciones antiguas que todavía usen `admin/admin`, la actualización revoca esa contraseña y muestra una clave de recuperación aleatoria en el log del servicio; consúltalo localmente con `sudo journalctl -u nubezero` y cámbiala al iniciar sesión.
+
+#### Actualizar una instalación existente
+
+Antes de actualizar, respalda `database.json`, todo el directorio `Storage` y la clave de cifrado. La primera ejecución de la nueva versión migra los archivos existentes y puede tardar; asegúrate de tener espacio libre suficiente. No interrumpas el servicio durante esa migración. Si el servidor no vuelve a iniciar, revisa `sudo systemctl status nubezero --no-pager` y `sudo journalctl -u nubezero -n 80 --no-pager` antes de reintentar.
+
+Para actualizar desde el dispositivo, ejecuta `sudo nubezero -u` y elige la actualización del servidor. La CLI informa si falla la descarga del instalador o del paquete, si el script descargado no pasa la comprobación de sintaxis o si la instalación termina con error. Una actualización fallida no garantiza rollback automático: conserva el respaldo para poder recuperar los datos. Para actualizar solo la CLI, usa `sudo nubezero update-cli`.
+
+#### Contraseña de administrador desde la CLI
+
+Ejecuta `sudo nubezero -c` y selecciona la opción **11** para mostrar la contraseña inicial temporal que aún esté configurada o la última contraseña de recuperación que haya quedado registrada en los logs del servicio. Esa opción no puede recuperar contraseñas guardadas únicamente como hash. Si no encuentra una contraseña temporal/de recuperación, usa la opción **6** para establecer una nueva contraseña. Trata cualquier contraseña mostrada como un secreto y cámbiala después de iniciar sesión.
 
 ---
 ### Conexión Rápida por SSH (`ssh.sh`)
