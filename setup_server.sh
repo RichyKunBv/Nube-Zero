@@ -143,6 +143,7 @@ function setup_systemd() {
   local name=$2
   local storage_path=$3
   local storage_argument=""
+  local storage_readwrite_path=""
   if [ -z "$name" ]; then
     name=$(hostname)
   fi
@@ -151,11 +152,14 @@ function setup_systemd() {
     return 1
   fi
   if [ -n "$storage_path" ]; then
-    if [[ "$storage_path" != /* || "$storage_path" == *'"'* || "$storage_path" == *'\'* || "$storage_path" == *'%'* || "$storage_path" == *$'\n'* ]]; then
+    if [[ ! "$storage_path" =~ ^/[a-zA-Z0-9._/-]+$ || "$storage_path" == *"/../"* || "$storage_path" == */.. ]]; then
       echo -e "${RED}ERROR: La ruta de almacenamiento conservada no es segura para systemd.${NC}"
       return 1
     fi
     storage_argument=" --storage \"$storage_path\""
+    if [[ "$storage_path" != "$INSTALL_DIR" && "$storage_path" != "$INSTALL_DIR/"* ]]; then
+      storage_readwrite_path="ReadWritePaths=$storage_path"
+    fi
   fi
   print_msg "Configurando servidor local y proxy HTTPS (Puerto público $port, Nombre: $name)..."
 
@@ -259,6 +263,7 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=$INSTALL_DIR
+$storage_readwrite_path
 CapabilityBoundingSet=
 
 [Install]
@@ -355,7 +360,10 @@ function action_update() {
     CURRENT_PORT=8080
   fi
   
-  CURRENT_STORAGE=$(printf '%s\n' "$exec_start" | sed -nE 's/.*--storage ([^[:space:]]+).*/\1/p')
+  CURRENT_STORAGE=$(printf '%s\n' "$exec_start" | sed -nE 's/.*--storage "([^"]+)".*/\1/p')
+  if [ -z "$CURRENT_STORAGE" ]; then
+    CURRENT_STORAGE=$(printf '%s\n' "$exec_start" | sed -nE 's/.*--storage ([^[:space:]]+).*/\1/p')
+  fi
   CURRENT_NAME=$(printf '%s\n' "$exec_start" | sed -nE 's/.*--name "([^"]*)".*/\1/p')
   if [ -z "$CURRENT_NAME" ]; then
     CURRENT_NAME=$(printf '%s\n' "$exec_start" | sed -nE 's/.*--name ([^[:space:]]+).*/\1/p')

@@ -79,7 +79,7 @@ El servicio de aplicación escucha únicamente en `127.0.0.1`; `stunnel` publica
 
 Antes de actualizar, respalda `database.json`, todo el directorio `Storage` y la clave de cifrado. La primera ejecución de la nueva versión migra los archivos existentes y puede tardar; asegúrate de tener espacio libre suficiente. No interrumpas el servicio durante esa migración. Si el servidor no vuelve a iniciar, revisa `sudo systemctl status nubezero --no-pager` y `sudo journalctl -u nubezero -n 80 --no-pager` antes de reintentar.
 
-Para actualizar desde el dispositivo, ejecuta `sudo nubezero -u` y elige la actualización del servidor. La CLI informa si falla la descarga del instalador o del paquete, si el script descargado no pasa la comprobación de sintaxis o si la instalación termina con error. Una actualización fallida no garantiza rollback automático: conserva el respaldo para poder recuperar los datos. Para actualizar solo la CLI, usa `sudo nubezero update-cli`.
+Para actualizar desde el dispositivo, ejecuta `sudo nubezero -u` y elige la actualización del servidor. La actualización conserva el almacenamiento externo configurado, incluyendo la ruta USB entre comillas en `ExecStart`, y permite al servicio escribir en ese punto de montaje bajo las restricciones de systemd. La CLI informa si falla la descarga del instalador o del paquete, si el script descargado no pasa la comprobación de sintaxis o si la instalación termina con error. Una actualización fallida no garantiza rollback automático: conserva el respaldo para poder recuperar los datos. Para actualizar solo la CLI, usa `sudo nubezero update-cli`.
 
 #### Contraseña de administrador desde la CLI
 

@@ -7,9 +7,14 @@
     <VersionFileContent>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)..\shared\Version.cs'))</VersionFileContent>
     <Version>$([System.Text.RegularExpressions.Regex]::Match($(VersionFileContent), '(?&lt;= "V?)[0-9\.]+').Value)</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon Condition="'$(RuntimeIdentifier)' == 'win-x64' Or '$(RuntimeIdentifier)' == 'win-arm64'">Assets\icon.ico</ApplicationIcon>
     <!-- Limitando plataformas a PC Desktop x64 y ARM64 -->
     <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>
   </PropertyGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\icon.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.2" />

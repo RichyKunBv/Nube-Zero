@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shared="clr-namespace:NubeZero.Shared;assembly=NubeZero.Shared"
         x:Class="NubeZero.Desktop.MainWindow"
+        Icon="/Assets/icon.ico"
         Title="NubeZero" Width="950" Height="650"
         Background="#121212"
         TransparencyLevelHint="Mica, AcrylicBlur, None"
