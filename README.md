@@ -1,6 +1,6 @@
 # Nube-Zero ☁️
 
-[![Versión](https://img.shields.io/badge/Versión-v0.7.7-blue.svg)](https://github.com/RichyKunBv/Nube-Zero)
+[![Versión](https://img.shields.io/badge/Versión-v0.7.8-blue.svg)](https://github.com/RichyKunBv/Nube-Zero)
 [![Status](https://img.shields.io/badge/Estado-Desarrollo-yellow.svg)](https://github.com/RichyKunBv/Nube-Zero)
 [![Licencia](https://img.shields.io/badge/Licencia-Apache_2.0-orange.svg)](https://github.com/RichyKunBv/Nube-Zero/blob/main/LICENSE)
 ---
@@ -23,6 +23,7 @@
 - 🔐 **Seguridad de transporte y archivos (v0.7.5)**: HTTPS obligatorio con certificado local fijado por huella SHA-256, cifrado autenticado en streaming desde los clientes y almacenamiento de archivos cifrados en el servidor. Las contraseñas usan PBKDF2-SHA256 con sal y las sesiones usan tokens aleatorios.
 - 🔁 **Conexión más sencilla (v0.7.6)**: los clientes recuerdan la URL del servidor y la huella SHA-256 verificada al cerrar la aplicación, para que no tengas que volver a introducirlas. Cerrar sesión elimina las credenciales y conserva esos datos de conexión. La contraseña solo se guarda si eliges recordarla y se almacena en el mecanismo seguro de la plataforma.
 - 🧰 **Diagnóstico y empaquetado de clientes (v0.7.7)**: los errores HTTP durante la conexión muestran el detalle devuelto por el servidor, incluyendo fallos al cargar la clave o los archivos. El empaquetado de macOS prepara por sí mismo los bundles e identifica correctamente el ejecutable de la aplicación.
+- 🌐 **Compatibilidad del proxy HTTPS (v0.7.8)**: el servidor acepta el encabezado `Host` público reenviado por stunnel y conserva el acceso al puerto HTTP interno restringido a conexiones locales.
 - 🗂️ **Navegación y vistas previas (v0.7.4)**: navegación por carpetas, iconos por tipo y miniaturas de imágenes generadas y cacheadas en los clientes. Los primeros fotogramas de video se generan localmente para clips de hasta 32 MiB; en escritorio se requiere `ffmpeg` disponible en el sistema.
 - 🔍 **Descubrimiento Automático Silencioso (v0.6.0)**: Encuentra tus servidores Nube-Zero en la red local bajo demanda con un solo clic (`🔍`). Funciona mediante un protocolo reactivo *Probe-Response* por UDP con clave de autenticación: **cero saturación de Wi-Fi, cero pings continuos y 0% de uso de CPU en reposo**.
 - 🏷️ **Soporte Multi-servidor y Nombres Personalizados**: Cada Raspberry Pi puede tener su propio nombre identificador (`--name "Mi Servidor"`), facilitando elegir entre múltiples servidores desde la pantalla de inicio de los clientes.

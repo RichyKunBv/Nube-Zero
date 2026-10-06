@@ -73,9 +73,12 @@ namespace NubeZero.Server
             
             using (HttpListener listener = new HttpListener())
             {
-                listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+                // HttpListener checks Host against registered prefixes before dispatching.
+                // The TLS proxy preserves the public Host header, so accept any Host here
+                // while enforcing loopback-only access in HandleRequestAsync.
+                listener.Prefixes.Add($"http://*:{port}/");
                 listener.Start();
-                Console.WriteLine($"Servidor local escuchando en 127.0.0.1:{port}; HTTPS público en el puerto {publicPort}.");
+                Console.WriteLine($"Servidor local escuchando en el puerto interno {port}; HTTPS público en el puerto {publicPort}.");
                 Console.WriteLine($"Directorio de almacenamiento: {_storageService.BasePath}");
 
                 var cts = new CancellationTokenSource();
@@ -112,6 +115,16 @@ namespace NubeZero.Server
             {
                 // Evitar fuga de sockets y threads inactivos forzando el cierre de la conexión TCP
                 response.KeepAlive = false;
+
+                IPAddress remoteAddress = request.RemoteEndPoint.Address;
+                if (!IPAddress.IsLoopback(remoteAddress)
+                    && !(remoteAddress.IsIPv4MappedToIPv6 && IPAddress.IsLoopback(remoteAddress.MapToIPv4())))
+                {
+                    Console.Error.WriteLine($"[Security] Rechazada conexión directa al puerto interno desde {remoteAddress}.");
+                    response.StatusCode = 403;
+                    response.Close();
+                    return;
+                }
 
                 Console.WriteLine($"[{request.HttpMethod}] {request.Url.AbsolutePath}");
                 // Rate limiting (max 10 req/s per IP)
