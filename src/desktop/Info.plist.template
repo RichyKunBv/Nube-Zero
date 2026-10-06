@@ -15,7 +15,7 @@
     <key>CFBundleSignature</key>
     <string>????</string>
     <key>CFBundleExecutable</key>
-    <string>NubeZero.Desktop</string>
+    <string>NubeZero</string>
     <key>CFBundleIconFile</key>
     <string>icon.icns</string>
     <key>CFBundleShortVersionString</key>

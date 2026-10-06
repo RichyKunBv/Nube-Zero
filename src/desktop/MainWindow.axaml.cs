@@ -249,12 +249,12 @@ public partial class MainWindow : Window
             }
             else
             {
-                ShowLoginError(await GetLoginFailureMessageAsync(response));
+                ShowLoginError(await GetApiFailureMessageAsync(response));
             }
         }
         catch (Exception ex)
         {
-            ShowLoginError($"Error de conexión: {ex.Message}");
+            ShowLoginError($"No se pudo completar la conexión: {ex.Message}");
         }
         finally
         {
@@ -263,20 +263,24 @@ public partial class MainWindow : Window
         }
     }
 
-    private static async Task<string> GetLoginFailureMessageAsync(HttpResponseMessage response)
+    private static async Task<string> GetApiFailureMessageAsync(HttpResponseMessage response)
     {
-        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-            return "El servidor rechazó el usuario o la contraseña (HTTP 401).";
-
+        string responseBody = await response.Content.ReadAsStringAsync();
         string detail = string.Empty;
         try
         {
-            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            using var document = JsonDocument.Parse(responseBody);
             if (document.RootElement.TryGetProperty("error", out var error))
                 detail = error.GetString() ?? string.Empty;
         }
         catch (JsonException)
         {
+        }
+
+        if (string.IsNullOrWhiteSpace(detail) && !string.IsNullOrWhiteSpace(responseBody))
+        {
+            detail = responseBody.Trim();
+            if (detail.Length > 300) detail = detail.Substring(0, 300) + "…";
         }
 
         return string.IsNullOrWhiteSpace(detail)
@@ -564,7 +568,9 @@ public partial class MainWindow : Window
                 return;
             }
             
-            response.EnsureSuccessStatusCode();
+            if (!response.IsSuccessStatusCode)
+                throw new InvalidOperationException(await GetApiFailureMessageAsync(response));
+
             var json = await response.Content.ReadAsStringAsync();
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             var files = JsonSerializer.Deserialize<List<ArchivoDTO>>(json, options);
@@ -990,7 +996,9 @@ public partial class MainWindow : Window
     private async Task LoadEncryptionKeyAsync()
     {
         using var response = await _httpClient.GetAsync("/api/encryption-key");
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"No se pudo obtener la clave de cifrado: {await GetApiFailureMessageAsync(response)}");
+
         var result = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
         string encodedKey = result.GetProperty("key").GetString() ?? string.Empty;
         byte[] key;

@@ -23,6 +23,10 @@ WIN_ARM_DIR="$HOME/NubeZeroARM64Windows/"
 LINUX_X64_DIR="$HOME/NubeZeroX86_64Linux/"
 LINUX_ARM_DIR="$HOME/NubeZeroARM64Linux/"
 
+get_version() {
+    awk -F'"' '/public static string Texto/ { sub(/^[vV]/, "", $2); print $2; exit }' "$1"
+}
+
 # Para macOS
 carpeta_macOS() {
     echo "Creando carpetas para macOS..."
@@ -39,8 +43,7 @@ carpeta_macOS() {
 actualizar_macOS() {
     echo "=== Iniciando compilación de NubeZero para macOS ==="
 
-    # 1. Extraer la versión del archivo .csproj usando awk
-    VERSION=$(awk -F'"' '/public static string Texto/ {gsub(/V/, "", $2); print $2}' "$PROJECT_DIR/src/shared/Version.cs")
+    VERSION=$(get_version "$PROJECT_DIR/src/shared/Version.cs")
 
     if [ -z "$VERSION" ]; then
         echo "Error: No se pudo encontrar la etiqueta <Version> en el .csproj"
@@ -94,7 +97,7 @@ carpeta_windows() {
 actualizar_windows() {
     echo "=== Iniciando compilación de NubeZero para Windows ==="
 
-    VERSION=$(awk -F'"' '/public static string Texto/ {gsub(/V/, "", $2); print $2}' "$PROJECT_DIR/src/shared/Version.cs")
+    VERSION=$(get_version "$PROJECT_DIR/src/shared/Version.cs")
 
     if [ -z "$VERSION" ]; then
         echo "Error: No se pudo encontrar la etiqueta <Version> en el .csproj"
@@ -139,7 +142,7 @@ carpeta_linux() {
 actualizar_linux() {
     echo "=== Iniciando compilación de NubeZero para Linux ==="
 
-    VERSION=$(awk -F'"' '/public static string Texto/ {gsub(/V/, "", $2); print $2}' "$PROJECT_DIR/src/shared/Version.cs")
+    VERSION=$(get_version "$PROJECT_DIR/src/shared/Version.cs")
 
     if [ -z "$VERSION" ]; then
         echo "Error: No se pudo encontrar la etiqueta <Version> en el .csproj"

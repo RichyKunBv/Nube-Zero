@@ -59,7 +59,7 @@ function actualizar_macOS {
         return
     }
     $csprojContent = Get-Content $csprojPath -Raw
-    if ($csprojContent -match 'public static string Texto.*?=\s*"V?(.*?)"') {
+    if ($csprojContent -match 'public static string Texto.*?=\s*"[vV]?([0-9][0-9.]*)"') {
         $VERSION = $Matches[1]
     } else {
         Write-Host "Error: No se encontró public static string Texto en Version.cs" -ForegroundColor Red
@@ -134,7 +134,7 @@ function actualizar_windows {
         return
     }
     $csprojContent = Get-Content $csprojPath -Raw
-    if ($csprojContent -match 'public static string Texto.*?=\s*"V?(.*?)"') {
+    if ($csprojContent -match 'public static string Texto.*?=\s*"[vV]?([0-9][0-9.]*)"') {
         $VERSION = $Matches[1]
     } else {
         Write-Host "Error: No se encontró public static string Texto en Version.cs" -ForegroundColor Red
@@ -186,7 +186,7 @@ function actualizar_linux {
         return
     }
     $csprojContent = Get-Content $csprojPath -Raw
-    if ($csprojContent -match 'public static string Texto.*?=\s*"V?(.*?)"') {
+    if ($csprojContent -match 'public static string Texto.*?=\s*"[vV]?([0-9][0-9.]*)"') {
         $VERSION = $Matches[1]
     } else {
         Write-Host "Error: No se encontró public static string Texto en Version.cs" -ForegroundColor Red

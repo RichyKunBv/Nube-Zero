@@ -55,6 +55,10 @@ WIN_ARM_DIR="$HOME/NubeZeroARM64Windows/"
 LINUX_X64_DIR="$HOME/NubeZeroX86_64Linux/"
 LINUX_ARM_DIR="$HOME/NubeZeroARM64Linux/"
 
+get_version() {
+    awk -F'"' '/public static string Texto/ { sub(/^[vV]/, "", $2); print $2; exit }' "$1"
+}
+
 # Para macOS
 carpeta_macOS() {
     echo "Creando carpetas..."
@@ -71,8 +75,7 @@ carpeta_macOS() {
 actualizar_macOS() {
     echo "=== Iniciando compilación de NubeZero ==="
 
-    # 1. Extraer la versión del archivo .csproj usando awk
-    VERSION=$(awk -F'"' '/public static string Texto/ {gsub(/V/, "", $2); print $2}' "$PROJECT_DIR/src/shared/Version.cs")
+    VERSION=$(get_version "$PROJECT_DIR/src/shared/Version.cs")
 
     if [ -z "$VERSION" ]; then
         echo "Error: No se pudo encontrar la etiqueta <Version> en el .csproj"
@@ -82,35 +85,44 @@ actualizar_macOS() {
     echo "Versión detectada: $VERSION"
     echo "Publicando binarios..."
 
-    # 2. Compilar ambas arquitecturas
+    # Cada compilación debe poder ejecutarse sin haber elegido antes la opción de crear carpetas.
+    carpeta_macOS || return 1
+
+    # 2. Compilar ambas arquitecturas y detenerse antes de copiar binarios antiguos.
     cd "$PROJECT_DIR/src/desktop"
-    dotnet publish -c Release -r osx-arm64 --self-contained -p:PublishSingleFile=true
-    dotnet publish -c Release -r osx-x64 --self-contained -p:PublishSingleFile=true
+    if ! dotnet publish NubeZero.Desktop.csproj -c Release -r osx-arm64 --self-contained -p:PublishSingleFile=true; then
+        echo "Error: Falló la publicación para macOS ARM64."
+        return 1
+    fi
+    if ! dotnet publish NubeZero.Desktop.csproj -c Release -r osx-x64 --self-contained -p:PublishSingleFile=true; then
+        echo "Error: Falló la publicación para macOS x64."
+        return 1
+    fi
 
     echo "Copiando archivos y actualizando Info.plist..."
 
     # 3. Procesar versión ARM64
-    cp -a "$PROJECT_DIR/src/desktop/bin/Release/net10.0/osx-arm64/publish/." "$MACOS_ARM_APP/Contents/MacOS/"
-    cp "$PROJECT_DIR/src/desktop/Assets/icon.icns" "$MACOS_ARM_APP/Contents/Resources/"
+    cp -a "$PROJECT_DIR/src/desktop/bin/Release/net10.0/osx-arm64/publish/." "$MACOS_ARM_APP/Contents/MacOS/" || return 1
+    cp "$PROJECT_DIR/src/desktop/Assets/icon.icns" "$MACOS_ARM_APP/Contents/Resources/" || return 1
     # plutil edita el valor de la llave CFBundleVersion de forma segura
-    plutil -replace CFBundleVersion -string "$VERSION" "$MACOS_ARM_APP/Contents/Info.plist"
-    plutil -replace CFBundleShortVersionString -string "$VERSION" "$MACOS_ARM_APP/Contents/Info.plist"
+    plutil -replace CFBundleVersion -string "$VERSION" "$MACOS_ARM_APP/Contents/Info.plist" || return 1
+    plutil -replace CFBundleShortVersionString -string "$VERSION" "$MACOS_ARM_APP/Contents/Info.plist" || return 1
 
     # 4. Procesar versión X86_64
-    cp -a "$PROJECT_DIR/src/desktop/bin/Release/net10.0/osx-x64/publish/." "$MACOS_X64_APP/Contents/MacOS/"
-    cp "$PROJECT_DIR/src/desktop/Assets/icon.icns" "$MACOS_X64_APP/Contents/Resources/"
-    plutil -replace CFBundleVersion -string "$VERSION" "$MACOS_X64_APP/Contents/Info.plist"
-    plutil -replace CFBundleShortVersionString -string "$VERSION" "$MACOS_X64_APP/Contents/Info.plist"
+    cp -a "$PROJECT_DIR/src/desktop/bin/Release/net10.0/osx-x64/publish/." "$MACOS_X64_APP/Contents/MacOS/" || return 1
+    cp "$PROJECT_DIR/src/desktop/Assets/icon.icns" "$MACOS_X64_APP/Contents/Resources/" || return 1
+    plutil -replace CFBundleVersion -string "$VERSION" "$MACOS_X64_APP/Contents/Info.plist" || return 1
+    plutil -replace CFBundleShortVersionString -string "$VERSION" "$MACOS_X64_APP/Contents/Info.plist" || return 1
 
     echo "Limpiando atributos y firmando aplicaciones..."
 
     # 5. Firmar ambas arquitecturas con una identidad estable si está configurada.
     local code_sign_identity="${MACOS_CODESIGN_IDENTITY:--}"
-    xattr -cr "$MACOS_ARM_APP"
-    codesign --force --deep --sign "$code_sign_identity" --identifier com.esmesolutions.nubezero "$MACOS_ARM_APP"
+    xattr -cr "$MACOS_ARM_APP" || return 1
+    codesign --force --deep --sign "$code_sign_identity" --identifier com.esmesolutions.nubezero "$MACOS_ARM_APP" || return 1
 
-    xattr -cr "$MACOS_X64_APP"
-    codesign --force --deep --sign "$code_sign_identity" --identifier com.esmesolutions.nubezero "$MACOS_X64_APP"
+    xattr -cr "$MACOS_X64_APP" || return 1
+    codesign --force --deep --sign "$code_sign_identity" --identifier com.esmesolutions.nubezero "$MACOS_X64_APP" || return 1
 
     echo "=== ¡Listo! NubeZero v$VERSION empaquetado para ambas arquitecturas ==="
 }
@@ -126,7 +138,7 @@ carpeta_windows() {
 actualizar_windows() {
     echo "=== Iniciando compilación de NubeZero para Windows ==="
 
-    VERSION=$(awk -F'"' '/public static string Texto/ {gsub(/V/, "", $2); print $2}' "$PROJECT_DIR/src/shared/Version.cs")
+    VERSION=$(get_version "$PROJECT_DIR/src/shared/Version.cs")
 
     if [ -z "$VERSION" ]; then
         echo "Error: No se pudo encontrar la etiqueta <Version> en el .csproj"
@@ -171,7 +183,7 @@ carpeta_linux() {
 actualizar_linux() {
     echo "=== Iniciando compilación de NubeZero para Linux ==="
 
-    VERSION=$(awk -F'"' '/public static string Texto/ {gsub(/V/, "", $2); print $2}' "$PROJECT_DIR/src/shared/Version.cs")
+    VERSION=$(get_version "$PROJECT_DIR/src/shared/Version.cs")
 
     if [ -z "$VERSION" ]; then
         echo "Error: No se pudo encontrar la etiqueta <Version> en el .csproj"
