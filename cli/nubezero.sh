@@ -4,6 +4,7 @@
 SERVICE_NAME="nubezero.service"
 SERVICE_FILE="/etc/systemd/system/nubezero.service"
 INSTALL_DIR="/opt/nubezero"
+NUBEZERO_USER="nubezero"
 
 # Colores
 GREEN='\033[0;32m'
@@ -166,33 +167,57 @@ function update_systemd_service() {
     return 1
   fi
 
-  local current_port=$(grep "ExecStart" "$SERVICE_FILE" 2>/dev/null | grep -oP '(?<=--port )\d+')
-  if [ -z "$current_port" ]; then current_port=8080; fi
+  local exec_start
+  exec_start=$(sed -n 's/^ExecStart=//p' "$SERVICE_FILE" | head -n 1)
+  local current_port=$(printf '%s\n' "$exec_start" | grep -oP '(?<=--port )\d+' | head -n 1)
+  if [ -z "$current_port" ]; then current_port=8081; fi
   if [ -n "$target_port" ]; then current_port=$target_port; fi
 
-  local current_name=$(grep "ExecStart" "$SERVICE_FILE" 2>/dev/null | grep -oP '(?<=--name ")[^"]+' || grep "ExecStart" "$SERVICE_FILE" 2>/dev/null | grep -oP '(?<=--name )\S+')
+  local current_public_port=$(printf '%s\n' "$exec_start" | grep -oP '(?<=--public-port )\d+' | head -n 1)
+  if [ -z "$current_public_port" ]; then current_public_port=8080; fi
+
+  local current_name=""
+  if [[ "$exec_start" =~ --name[[:space:]]\"([^\"]*)\" ]]; then
+    current_name=${BASH_REMATCH[1]}
+  elif [[ "$exec_start" =~ --name[[:space:]]([^[:space:]]+) ]]; then
+    current_name=${BASH_REMATCH[1]}
+  fi
   if [ "$target_name" == "__CLEAR__" ]; then
     current_name=""
   elif [ -n "$target_name" ]; then
     current_name="$target_name"
   fi
 
-  local current_storage=$(grep "ExecStart" "$SERVICE_FILE" 2>/dev/null | grep -oP '(?<=--storage )\S+')
+  local current_storage=""
+  if [[ "$exec_start" =~ --storage[[:space:]]\"([^\"]+)\" ]]; then
+    current_storage=${BASH_REMATCH[1]}
+  elif [[ "$exec_start" =~ --storage[[:space:]]([^[:space:]]+) ]]; then
+    current_storage=${BASH_REMATCH[1]}
+  fi
   if [ "$target_storage" == "__CLEAR__" ]; then
     current_storage=""
   elif [ -n "$target_storage" ]; then
     current_storage="$target_storage"
   fi
 
-  local new_cmd="ExecStart=/usr/bin/mono $INSTALL_DIR/bin/NubeZero.Server.exe --port $current_port"
+  local new_cmd="ExecStart=/usr/bin/mono $INSTALL_DIR/bin/NubeZero.Server.exe --port $current_port --public-port $current_public_port"
   if [ -n "$current_storage" ]; then
-    new_cmd="$new_cmd --storage $current_storage"
+    new_cmd="$new_cmd --storage \"$current_storage\""
   fi
   if [ -n "$current_name" ]; then
     new_cmd="$new_cmd --name \"$current_name\""
   fi
 
   sed -i "s|ExecStart=.*|$new_cmd|g" "$SERVICE_FILE"
+  if [ -n "$current_storage" ] && [ "$current_storage" != "$INSTALL_DIR" ] && [[ "$current_storage" != "$INSTALL_DIR/"* ]]; then
+    if ! grep -Fxq "ReadWritePaths=$current_storage" "$SERVICE_FILE"; then
+      sed -i "\|^ReadWritePaths=$INSTALL_DIR$|a\\
+ReadWritePaths=$current_storage
+" "$SERVICE_FILE"
+    fi
+  else
+    sed -i '\|^ReadWritePaths=/mnt/nubezero_usb$|d' "$SERVICE_FILE"
+  fi
   systemctl daemon-reload
 }
 
@@ -329,9 +354,60 @@ function menu_storage() {
       fi
 
       mount -a
-      chown -R root:root "$MOUNT_DIR"
+      if ! mountpoint -q "$MOUNT_DIR"; then
+        echo -e "${RED}Error: la memoria USB no quedó montada en $MOUNT_DIR; no se cambiaron sus permisos ni la configuración del servicio.${NC}"
+        pause_menu
+        return 1
+      fi
+      if ! id -u "$NUBEZERO_USER" >/dev/null 2>&1; then
+        echo -e "${RED}Error: no existe la cuenta de servicio $NUBEZERO_USER.${NC}"
+        pause_menu
+        return 1
+      fi
+      systemctl stop nubezero
+      if ! chown "$NUBEZERO_USER:$NUBEZERO_USER" "$MOUNT_DIR" ||
+         ! chmod 0750 "$MOUNT_DIR" ||
+         ! install -d -o "$NUBEZERO_USER" -g "$NUBEZERO_USER" -m 0750 "$MOUNT_DIR/Storage" ||
+         ! find "$MOUNT_DIR/Storage" -xdev ! -type l -exec chown "$NUBEZERO_USER:$NUBEZERO_USER" {} +; then
+        echo -e "${RED}Error: no se pudieron asignar los permisos del almacenamiento a $NUBEZERO_USER.${NC}"
+        pause_menu
+        return 1
+      fi
+      local database_path="$MOUNT_DIR/database.json"
+      if [ -L "$database_path" ]; then
+        echo -e "${RED}Error: database.json es un enlace simbólico; no se modificó.${NC}"
+        pause_menu
+        return 1
+      elif [ -e "$database_path" ] &&
+           ! chown "$NUBEZERO_USER:$NUBEZERO_USER" "$database_path"; then
+        echo -e "${RED}Error: no se pudo asignar database.json a $NUBEZERO_USER.${NC}"
+        pause_menu
+        return 1
+      elif [ -e "$database_path" ] && ! chmod 0600 "$database_path"; then
+        echo -e "${RED}Error: no se pudieron ajustar los permisos de database.json.${NC}"
+        pause_menu
+        return 1
+      fi
+      local marker_path="$MOUNT_DIR/.nubezero-encryption-v1"
+      if [ -L "$marker_path" ]; then
+        echo -e "${RED}Error: el marcador de cifrado es un enlace simbólico; no se modificó.${NC}"
+        pause_menu
+        return 1
+      elif [ -e "$marker_path" ] &&
+           ! chown "$NUBEZERO_USER:$NUBEZERO_USER" "$marker_path"; then
+        echo -e "${RED}Error: no se pudo asignar el marcador de cifrado a $NUBEZERO_USER.${NC}"
+        pause_menu
+        return 1
+      elif [ -e "$marker_path" ] && ! chmod 0600 "$marker_path"; then
+        echo -e "${RED}Error: no se pudieron ajustar los permisos del marcador de cifrado.${NC}"
+        pause_menu
+        return 1
+      fi
 
-      update_systemd_service "" "" "$MOUNT_DIR"
+      if ! update_systemd_service "" "" "$MOUNT_DIR"; then
+        pause_menu
+        return 1
+      fi
       systemctl restart nubezero
       echo -e "${GREEN}✓ Almacenamiento configurado en $MOUNT_DIR y servicio reiniciado.${NC}"
       pause_menu
