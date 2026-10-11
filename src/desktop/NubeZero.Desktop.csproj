@@ -3,6 +3,10 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <AssemblyName>NubeZero</AssemblyName>
+    <Company>EsMeSolutions</Company>
+    <Authors>RichyKunBv</Authors>
+    <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
+
     <Nullable>enable</Nullable>
     <VersionFileContent>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)..\shared\Version.cs'))</VersionFileContent>
     <Version>$([System.Text.RegularExpressions.Regex]::Match($(VersionFileContent), '(?&lt;= "V?)[0-9\.]+').Value)</Version>
