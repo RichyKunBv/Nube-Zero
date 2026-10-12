@@ -2,7 +2,7 @@
 
 [![Versión](https://img.shields.io/badge/Versión-v0.7.8-blue.svg)](https://github.com/RichyKunBv/Nube-Zero)
 [![Status](https://img.shields.io/badge/Estado-Desarrollo-yellow.svg)](https://github.com/RichyKunBv/Nube-Zero)
-[![Licencia](https://img.shields.io/badge/Licencia-Apache_2.0-orange.svg)](https://github.com/RichyKunBv/Nube-Zero/blob/main/LICENSE)
+
 ---
 [![Lenguaje_Server](https://img.shields.io/badge/Lenguaje_Server-C%23_.NET_4.7.2_(estable)-lightgrey.svg)](https://dotnet.microsoft.com/es-es/download/dotnet-framework/net472)
 [![Lenguaje_Server](https://img.shields.io/badge/Lenguaje_Server-C%23_.NET_10.0_(en_pruebas)-lightgrey.svg)](https://dotnet.microsoft.com/es-es/download/dotnet/10.0)
@@ -268,3 +268,13 @@ sda           8:0    1 14.5G  0 disk
 * **Bloqueo del Compilador:** Al remover Apple las librerías de enlace heredadas en Xcode y las imágenes virtuales de integración continua, el entorno automatizado de GitHub Actions perderá la capacidad técnica de compilar binarios `osx-x64` estables basados en el runtime de .NET 12.
 
 *Nota: Los usuarios de Macs con procesadores Intel antiguos podrán seguir utilizando de forma indefinida las versiones cliente basadas en .NET 10, pero no podrán actualizar a funciones del ecosistema de .NET 12. (una disculpa pero no puedo estar sobre una version que se quede sin soporte ya que seria un riesgo para su seguridad ya que es una Nube donde pueden subir su informacion importante y privada (datos que no recopilo ya que valoro la seguridad) asi que sera necesario actualizar el lenguaje)*
+
+---
+# Politica de Privacidad, Actualizaciones y Licencias
+
+[![PoliticaPriv](https://img.shields.io/badge/Politica%20de%20Privacidad-lightgrey.svg)](https://github.com/RichyKunBv/RichyKunBv/blob/main/politicas/priv.md)
+
+[![PoliticaAct](https://img.shields.io/badge/Politica%20de%20Actualizaciones-lightgrey.svg)](https://github.com/RichyKunBv/RichyKunBv/blob/main/politicas/act.md)
+
+[![Licencia](https://img.shields.io/badge/Licencia%20Apache-lightgrey.svg)](https://github.com/RichyKunBv/Nube-Zero/blob/main/LICENSE)
+
