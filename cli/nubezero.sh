@@ -158,7 +158,7 @@ function menu_system_repair() {
 
 # Helper para actualizar ExecStart en el archivo systemd sin duplicar lógica ni romper flags
 function update_systemd_service() {
-  local target_port=$1
+  local target_public_port=$1
   local target_name=$2
   local target_storage=$3
 
@@ -169,12 +169,16 @@ function update_systemd_service() {
 
   local exec_start
   exec_start=$(sed -n 's/^ExecStart=//p' "$SERVICE_FILE" | head -n 1)
-  local current_port=$(printf '%s\n' "$exec_start" | grep -oP '(?<=--port )\d+' | head -n 1)
-  if [ -z "$current_port" ]; then current_port=8081; fi
-  if [ -n "$target_port" ]; then current_port=$target_port; fi
+  local current_port=8081
+  if [[ "$exec_start" =~ --port[[:space:]]([0-9]+) ]]; then
+    current_port=${BASH_REMATCH[1]}
+  fi
 
-  local current_public_port=$(printf '%s\n' "$exec_start" | grep -oP '(?<=--public-port )\d+' | head -n 1)
-  if [ -z "$current_public_port" ]; then current_public_port=8080; fi
+  local current_public_port=8080
+  if [[ "$exec_start" =~ --public-port[[:space:]]([0-9]+) ]]; then
+    current_public_port=${BASH_REMATCH[1]}
+  fi
+  if [ -n "$target_public_port" ]; then current_public_port=$target_public_port; fi
 
   local current_name=""
   if [[ "$exec_start" =~ --name[[:space:]]\"([^\"]*)\" ]]; then
@@ -227,13 +231,27 @@ function show_status_dashboard() {
     svc_status="${GREEN}● Activo (running)${NC}"
   fi
 
-  local current_port=$(grep "ExecStart" "$SERVICE_FILE" 2>/dev/null | grep -oP '(?<=--port )\d+')
-  if [ -z "$current_port" ]; then current_port=8080; fi
+  local exec_start
+  exec_start=$(sed -n 's/^ExecStart=//p' "$SERVICE_FILE" | head -n 1)
+  local current_port=8080
+  if [[ "$exec_start" =~ --public-port[[:space:]]([0-9]+) ]]; then
+    current_port=${BASH_REMATCH[1]}
+  fi
 
-  local current_name=$(grep "ExecStart" "$SERVICE_FILE" 2>/dev/null | grep -oP '(?<=--name ")[^"]+' || grep "ExecStart" "$SERVICE_FILE" 2>/dev/null | grep -oP '(?<=--name )\S+')
+  local current_name=""
+  if [[ "$exec_start" =~ --name[[:space:]]\"([^\"]*)\" ]]; then
+    current_name=${BASH_REMATCH[1]}
+  elif [[ "$exec_start" =~ --name[[:space:]]([^[:space:]]+) ]]; then
+    current_name=${BASH_REMATCH[1]}
+  fi
   if [ -z "$current_name" ]; then current_name="(Por defecto: $(hostname))"; fi
 
-  local current_storage=$(grep "ExecStart" "$SERVICE_FILE" 2>/dev/null | grep -oP '(?<=--storage )\S+')
+  local current_storage=""
+  if [[ "$exec_start" =~ --storage[[:space:]]\"([^\"]+)\" ]]; then
+    current_storage=${BASH_REMATCH[1]}
+  elif [[ "$exec_start" =~ --storage[[:space:]]([^[:space:]]+) ]]; then
+    current_storage=${BASH_REMATCH[1]}
+  fi
   local storage_info="MicroSD local ($INSTALL_DIR/Storage)"
   if [ -n "$current_storage" ]; then
     if mountpoint -q "$current_storage" 2>/dev/null; then
@@ -279,8 +297,12 @@ function menu_change_name() {
 
 function menu_change_port() {
   print_header
-  local current_port=$(grep "ExecStart" "$SERVICE_FILE" 2>/dev/null | grep -oP '(?<=--port )\d+')
-  if [ -z "$current_port" ]; then current_port=8080; fi
+  local exec_start
+  exec_start=$(sed -n 's/^ExecStart=//p' "$SERVICE_FILE" | head -n 1)
+  local current_port=8080
+  if [[ "$exec_start" =~ --public-port[[:space:]]([0-9]+) ]]; then
+    current_port=${BASH_REMATCH[1]}
+  fi
   echo -e "${CYAN}--- Cambiar Puerto HTTPS ---${NC}"
   echo -e "Puerto actual: ${YELLOW}$current_port${NC}"
   echo -ne "Introduce el nuevo puerto [1-65535] (deja vacío para cancelar): "
@@ -298,7 +320,14 @@ function menu_change_port() {
 function menu_storage() {
   print_header
   echo -e "${CYAN}--- Gestión de Almacenamiento ---${NC}"
-  local current_storage=$(grep "ExecStart" "$SERVICE_FILE" 2>/dev/null | grep -oP '(?<=--storage )\S+')
+  local exec_start
+  exec_start=$(sed -n 's/^ExecStart=//p' "$SERVICE_FILE" | head -n 1)
+  local current_storage=""
+  if [[ "$exec_start" =~ --storage[[:space:]]\"([^\"]+)\" ]]; then
+    current_storage=${BASH_REMATCH[1]}
+  elif [[ "$exec_start" =~ --storage[[:space:]]([^[:space:]]+) ]]; then
+    current_storage=${BASH_REMATCH[1]}
+  fi
   if [ -n "$current_storage" ]; then
     echo -e "Almacenamiento actual: ${GREEN}$current_storage${NC}"
   else

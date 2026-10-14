@@ -73,7 +73,7 @@ Después de verificarla, los clientes recuerdan la URL y la huella en el disposi
 
 **La clave de cifrado es administrada por el servidor y se entrega a usuarios autenticados por HTTPS fijado** para que sus clientes cifren y descifren archivos localmente. Esto no es cifrado de extremo a extremo (E2E): el servidor administra la clave y podría leer los archivos. Protege y respalda la clave que el instalador muestra una sola vez; perderla o cambiarla hace irrecuperables los archivos. En el primer inicio de la versión nueva, el servidor migra automáticamente los archivos existentes a formato cifrado; mantén una copia de seguridad y espacio libre suficiente. Los clientes anteriores que no soporten HTTPS fijado y el formato nuevo no podrán conectarse ni leer los archivos.
 
-El servicio de aplicación escucha únicamente en `127.0.0.1`; `stunnel` publica HTTPS en el puerto elegido. No expongas el puerto interno `8081`. Las credenciales iniciales se solicitan durante la instalación y se eliminan del archivo de entorno después de crear la cuenta. En instalaciones antiguas que todavía usen `admin/admin`, la actualización revoca esa contraseña y muestra una clave de recuperación aleatoria en el log del servicio; consúltalo localmente con `sudo journalctl -u nubezero` y cámbiala al iniciar sesión.
+El servicio de aplicación escucha en el puerto interno `8081`; `stunnel` publica HTTPS en el puerto público configurado (por defecto `8080`). Los clientes deben conectarse a `https://<IP-del-servidor>:8080` —o al puerto HTTPS que configuraste—, nunca al puerto interno `8081`. Las credenciales iniciales se solicitan durante la instalación y se eliminan del archivo de entorno después de crear la cuenta. En instalaciones antiguas que todavía usen `admin/admin`, la actualización revoca esa contraseña y muestra una clave de recuperación aleatoria en el log del servicio; consúltalo localmente con `sudo journalctl -u nubezero` y cámbiala al iniciar sesión.
 
 #### Actualizar una instalación existente
 
@@ -277,4 +277,3 @@ sda           8:0    1 14.5G  0 disk
 [![PoliticaAct](https://img.shields.io/badge/Politica%20de%20Actualizaciones-lightgrey.svg)](https://github.com/RichyKunBv/RichyKunBv/blob/main/politicas/act.md)
 
 [![Licencia](https://img.shields.io/badge/Licencia%20Apache-lightgrey.svg)](https://github.com/RichyKunBv/Nube-Zero/blob/main/LICENSE)
-
