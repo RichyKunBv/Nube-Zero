@@ -274,6 +274,7 @@ EOF
 Description=Nube-Zero HTTPS/TLS proxy
 After=network.target nubezero.service
 Requires=nubezero.service
+PartOf=nubezero.service
 
 [Service]
 Type=simple
@@ -380,6 +381,9 @@ function action_update() {
 function action_uninstall() {
   print_warn "Iniciando desinstalación de Nube-Zero..."
   
+  systemctl stop nubezero-tls || true
+  systemctl disable nubezero-tls || true
+  rm -f "$TLS_SERVICE_FILE"
   systemctl stop nubezero || true
   systemctl disable nubezero || true
   rm -f "$SERVICE_FILE"

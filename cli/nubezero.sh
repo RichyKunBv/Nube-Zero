@@ -33,6 +33,27 @@ function pause_menu() {
   read -r
 }
 
+function restart_server_services() {
+  if ! systemctl restart nubezero nubezero-tls; then
+    echo -e "${RED}Error: no se pudieron reiniciar el servidor y el proxy HTTPS. Revisa: sudo systemctl status nubezero nubezero-tls --no-pager -l${NC}"
+    return 1
+  fi
+}
+
+function start_server_services() {
+  if ! systemctl start nubezero nubezero-tls; then
+    echo -e "${RED}Error: no se pudieron iniciar el servidor y el proxy HTTPS. Revisa: sudo systemctl status nubezero nubezero-tls --no-pager -l${NC}"
+    return 1
+  fi
+}
+
+function stop_server_services() {
+  if ! systemctl stop nubezero-tls nubezero; then
+    echo -e "${RED}Error: no se pudieron detener el servidor y el proxy HTTPS.${NC}"
+    return 1
+  fi
+}
+
 function repair_dns() {
   echo -e "\n${CYAN}[+] Reparando resolución DNS...${NC}"
   local dns_file="/tmp/resolv.conf"
@@ -286,9 +307,9 @@ function menu_change_name() {
   echo -ne "Introduce el nuevo nombre (deja vacío para cancelar): "
   read NEW_NAME
   if [ -n "$NEW_NAME" ]; then
-    update_systemd_service "" "$NEW_NAME" ""
-    systemctl restart nubezero
-    echo -e "${GREEN}✓ Nombre actualizado a '$NEW_NAME' y servicio reiniciado.${NC}"
+    if update_systemd_service "" "$NEW_NAME" "" && restart_server_services; then
+      echo -e "${GREEN}✓ Nombre actualizado a '$NEW_NAME' y servidor con proxy HTTPS reiniciados.${NC}"
+    fi
   else
     echo -e "${YELLOW}Operación cancelada. No se realizaron cambios.${NC}"
   fi
@@ -308,9 +329,9 @@ function menu_change_port() {
   echo -ne "Introduce el nuevo puerto [1-65535] (deja vacío para cancelar): "
   read NEW_PORT
   if [ -n "$NEW_PORT" ] && [[ "$NEW_PORT" =~ ^[0-9]+$ ]]; then
-    update_systemd_service "$NEW_PORT" "" ""
-    systemctl restart nubezero
-    echo -e "${GREEN}✓ Puerto actualizado a $NEW_PORT y servicio reiniciado.${NC}"
+    if update_systemd_service "$NEW_PORT" "" "" && restart_server_services; then
+      echo -e "${GREEN}✓ Puerto actualizado a $NEW_PORT y servidor con proxy HTTPS reiniciados.${NC}"
+    fi
   else
     echo -e "${YELLOW}Operación cancelada o puerto no válido.${NC}"
   fi
@@ -393,7 +414,10 @@ function menu_storage() {
         pause_menu
         return 1
       fi
-      systemctl stop nubezero
+      if ! stop_server_services; then
+        pause_menu
+        return 1
+      fi
       if ! chown "$NUBEZERO_USER:$NUBEZERO_USER" "$MOUNT_DIR" ||
          ! chmod 0750 "$MOUNT_DIR" ||
          ! install -d -o "$NUBEZERO_USER" -g "$NUBEZERO_USER" -m 0750 "$MOUNT_DIR/Storage" ||
@@ -437,8 +461,9 @@ function menu_storage() {
         pause_menu
         return 1
       fi
-      systemctl restart nubezero
-      echo -e "${GREEN}✓ Almacenamiento configurado en $MOUNT_DIR y servicio reiniciado.${NC}"
+      if restart_server_services; then
+        echo -e "${GREEN}✓ Almacenamiento configurado en $MOUNT_DIR y servidor con proxy HTTPS reiniciados.${NC}"
+      fi
       pause_menu
       ;;
 
@@ -447,8 +472,9 @@ function menu_storage() {
       read CONFIRM_UNLINK
       if [[ "$CONFIRM_UNLINK" == "s" || "$CONFIRM_UNLINK" == "S" ]]; then
         update_systemd_service "" "" "__CLEAR__"
-        systemctl restart nubezero
-        echo -e "${GREEN}✓ Se ha vuelto al almacenamiento local de la MicroSD.${NC}"
+        if restart_server_services; then
+          echo -e "${GREEN}✓ Se ha vuelto al almacenamiento local de la MicroSD.${NC}"
+        fi
       else
         echo -e "${YELLOW}Operación cancelada.${NC}"
       fi
@@ -727,8 +753,9 @@ function run_config() {
       5) menu_optimization ;;
       6) change_admin_password ;;
       7)
-        systemctl restart nubezero
-        echo -e "${GREEN}✓ Servicio reiniciado.${NC}"
+        if restart_server_services; then
+          echo -e "${GREEN}✓ Servidor y proxy HTTPS reiniciados.${NC}"
+        fi
         pause_menu
         ;;
       8)
@@ -855,19 +882,22 @@ case "$1" in
     ;;
   passwd|password)
     change_admin_password
-    systemctl restart nubezero
+    restart_server_services
     ;;
   start)
-    systemctl start nubezero
-    echo -e "${GREEN}Servicio iniciado.${NC}"
+    if start_server_services; then
+      echo -e "${GREEN}Servidor y proxy HTTPS iniciados.${NC}"
+    fi
     ;;
   stop)
-    systemctl stop nubezero
-    echo -e "${GREEN}Servicio detenido.${NC}"
+    if stop_server_services; then
+      echo -e "${GREEN}Servidor y proxy HTTPS detenidos.${NC}"
+    fi
     ;;
   restart)
-    systemctl restart nubezero
-    echo -e "${GREEN}Servicio reiniciado.${NC}"
+    if restart_server_services; then
+      echo -e "${GREEN}Servidor y proxy HTTPS reiniciados.${NC}"
+    fi
     ;;
   logs)
     journalctl -u nubezero -f
