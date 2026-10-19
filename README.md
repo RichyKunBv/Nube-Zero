@@ -69,6 +69,8 @@ El asistente solicitará un **nombre identificador** (por ejemplo, *PiZero-Sala*
 
 En la primera conexión, introduce la huella SHA-256 que el instalador muestra al final y verifícala por SSH antes de confiar en ella. No aceptes una huella enviada únicamente por la propia conexión de red.
 
+Si necesitas volver a verla después, ejecuta `sudo nubezero fingerprint` en la Raspberry; también está en `sudo nubezero -c`, opción 12. Copia la línea hexadecimal con dos puntos directamente en el campo de huella del cliente. La huella identifica el certificado público y no es una contraseña ni una clave privada; obténla desde la consola local o una sesión SSH confiable del servidor.
+
 Después de verificarla, los clientes recuerdan la URL y la huella en el dispositivo para las siguientes aperturas. Esta comodidad no sustituye la verificación inicial: si reinstalas la aplicación, cambias de dispositivo o borras sus datos, tendrás que introducir de nuevo la huella verificada.
 
 **La clave de cifrado es administrada por el servidor y se entrega a usuarios autenticados por HTTPS fijado** para que sus clientes cifren y descifren archivos localmente. Esto no es cifrado de extremo a extremo (E2E): el servidor administra la clave y podría leer los archivos. Protege y respalda la clave que el instalador muestra una sola vez; perderla o cambiarla hace irrecuperables los archivos. En el primer inicio de la versión nueva, el servidor migra automáticamente los archivos existentes a formato cifrado; mantén una copia de seguridad y espacio libre suficiente. Los clientes anteriores que no soporten HTTPS fijado y el formato nuevo no podrán conectarse ni leer los archivos.

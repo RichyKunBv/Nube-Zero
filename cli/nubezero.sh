@@ -722,6 +722,34 @@ function show_admin_password() {
   pause_menu
 }
 
+function show_certificate_fingerprint() {
+  local certificate="/etc/nubezero/tls/server.crt"
+  if [ ! -r "$certificate" ]; then
+    echo -e "${RED}No se puede leer el certificado público: $certificate${NC}"
+    echo "Comprueba la instalación TLS con: sudo systemctl status nubezero-tls --no-pager -l"
+    return 1
+  fi
+  if ! command -v openssl >/dev/null 2>&1; then
+    echo -e "${RED}No se encontró OpenSSL; no se pudo calcular la huella.${NC}"
+    return 1
+  fi
+
+  local fingerprint_output
+  if ! fingerprint_output=$(openssl x509 -in "$certificate" -noout -fingerprint -sha256); then
+    echo -e "${RED}OpenSSL no pudo leer el certificado. No se mostró ninguna huella.${NC}"
+    return 1
+  fi
+  local fingerprint="${fingerprint_output#*=}"
+  if [ -z "$fingerprint" ] || [ "$fingerprint" = "$fingerprint_output" ]; then
+    echo -e "${RED}OpenSSL devolvió una huella vacía o no válida.${NC}"
+    return 1
+  fi
+
+  echo -e "${CYAN}Huella SHA-256 del certificado público (cópiala en el campo Huella del cliente):${NC}"
+  printf '%s\n' "$fingerprint"
+  echo -e "${YELLOW}La huella no es una contraseña; verifica que la obtuviste en la consola/SSH confiable de este servidor.${NC}"
+}
+
 function run_config() {
   while true; do
     clear 2>/dev/null || true
@@ -740,9 +768,10 @@ function run_config() {
     echo "  9) 🚀 Actualizar SOLO esta herramienta CLI (desde main)"
     echo " 10) 🧰 Reparación rápida del sistema"
     echo " 11) 👁️  Ver contraseña inicial/de recuperación (si aún está disponible)"
+    echo " 12) 🔐 Mostrar huella SHA-256 para configurar clientes"
     echo "  0) 🚪 Salir"
     echo ""
-    echo -ne "${CYAN}Selecciona una opción [0-11]: ${NC}"
+    echo -ne "${CYAN}Selecciona una opción [0-12]: ${NC}"
     read -r OPTION
 
     case "$OPTION" in
@@ -767,6 +796,10 @@ function run_config() {
         ;;
       10) menu_system_repair ;;
       11) show_admin_password ;;
+      12)
+        show_certificate_fingerprint
+        pause_menu
+        ;;
       0|q|Q)
         echo -e "\n${GREEN}Saliendo de la configuración de Nube-Zero.${NC}"
         break
@@ -880,6 +913,9 @@ case "$1" in
     print_header
     show_status_dashboard
     ;;
+  fingerprint|huella)
+    show_certificate_fingerprint
+    ;;
   passwd|password)
     change_admin_password
     restart_server_services
@@ -908,6 +944,7 @@ case "$1" in
     echo "Opciones:"
     echo "  -c, config       Abre el panel interactivo modular de configuración"
     echo "  status           Muestra el estado actual del servidor (dashboard)"
+    echo "  fingerprint      Muestra la huella SHA-256 para configurar los clientes"
     echo "  -u, update       Menú de actualización (Servidor o CLI)"
     echo "  update-cli       Actualiza exclusivamente la herramienta CLI desde main"
     echo "  passwd           Restablece la contraseña del usuario administrador"
