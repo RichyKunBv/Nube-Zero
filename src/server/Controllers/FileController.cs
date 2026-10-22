@@ -38,10 +38,16 @@ namespace NubeZero.Server.Controllers
 
                 var filesList = new List<ArchivoDTO>();
 
-                // Directorios
+                // Directorios (ordenados alfabéticamente A-Z)
+                var dirInfos = new List<DirectoryInfo>();
                 foreach (var dir in Directory.EnumerateDirectories(safePath))
                 {
-                    var info = new DirectoryInfo(dir);
+                    dirInfos.Add(new DirectoryInfo(dir));
+                }
+                dirInfos.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase));
+
+                foreach (var info in dirInfos)
+                {
                     filesList.Add(new ArchivoDTO
                     {
                         Nombre = info.Name,
@@ -52,11 +58,17 @@ namespace NubeZero.Server.Controllers
                     });
                 }
 
-                // Archivos
+                // Archivos (ordenados alfabéticamente A-Z)
+                var fileInfos = new List<FileInfo>();
                 foreach (var file in Directory.EnumerateFiles(safePath))
                 {
-                    var info = new FileInfo(file);
-                    string owner = _dbContext.GetFileOwner(file);
+                    fileInfos.Add(new FileInfo(file));
+                }
+                fileInfos.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase));
+
+                foreach (var info in fileInfos)
+                {
+                    string owner = _dbContext.GetFileOwner(info.FullName);
                     filesList.Add(new ArchivoDTO
                     {
                         Nombre = info.Name,
@@ -371,6 +383,7 @@ namespace NubeZero.Server.Controllers
                 else if (Directory.Exists(safePath))
                 {
                     Directory.Move(safePath, newSafePath);
+                    _dbContext.RenameFileMetadata(safePath, newSafePath);
                 }
                 else
                 {
@@ -391,6 +404,79 @@ namespace NubeZero.Server.Controllers
             {
                 Console.Error.WriteLine($"Error al renombrar archivo: {ex}");
                 await WriteErrorAsync(response, 500, "Error interno del servidor.");
+            }
+            finally
+            {
+                response.Close();
+            }
+        }
+
+        public async Task HandleMoveAsync(HttpListenerContext context, string relativePath, string targetDirectory)
+        {
+            var response = context.Response;
+            try
+            {
+                if (string.IsNullOrWhiteSpace(relativePath))
+                {
+                    await WriteErrorAsync(response, 400, "Debe especificar la ruta original.");
+                    return;
+                }
+
+                string safeSource = _storageService.GetSafePath(relativePath);
+                string safeTargetDir = _storageService.GetSafePath(targetDirectory ?? "");
+
+                if (!Directory.Exists(safeTargetDir))
+                {
+                    await WriteErrorAsync(response, 404, "La carpeta de destino no existe.");
+                    return;
+                }
+
+                string itemName = Path.GetFileName(safeSource);
+                string destinationPath = Path.Combine(safeTargetDir, itemName);
+
+                if (File.Exists(destinationPath) || Directory.Exists(destinationPath))
+                {
+                    await WriteErrorAsync(response, 409, "Ya existe un elemento con el mismo nombre en la carpeta de destino.");
+                    return;
+                }
+
+                if (File.Exists(safeSource))
+                {
+                    File.Move(safeSource, destinationPath);
+                    _dbContext.RenameFileMetadata(safeSource, destinationPath);
+                }
+                else if (Directory.Exists(safeSource))
+                {
+                    // Evitar mover una carpeta dentro de sí misma
+                    string sourceSlash = safeSource.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                    if (destinationPath.StartsWith(sourceSlash, StringComparison.OrdinalIgnoreCase) || destinationPath.Equals(safeSource, StringComparison.OrdinalIgnoreCase))
+                    {
+                        await WriteErrorAsync(response, 400, "No se puede mover una carpeta dentro de sí misma.");
+                        return;
+                    }
+
+                    Directory.Move(safeSource, destinationPath);
+                    _dbContext.RenameFileMetadata(safeSource, destinationPath);
+                }
+                else
+                {
+                    await WriteErrorAsync(response, 404, "Elemento de origen no encontrado.");
+                    return;
+                }
+
+                response.StatusCode = 200;
+                response.ContentType = "application/json";
+                byte[] buffer = System.Text.Encoding.UTF8.GetBytes("{\"status\":\"moved\"}");
+                await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                await WriteErrorAsync(response, 403, "Acceso denegado.");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Error al mover: {ex}");
+                await WriteErrorAsync(response, 500, "Error interno al mover el elemento.");
             }
             finally
             {

@@ -43,6 +43,9 @@ public partial class MainWindow : Window
     private readonly SemaphoreSlim _thumbnailSlots = new SemaphoreSlim(2, 2);
     private bool _hasSavedMacCredentials;
     private bool _isNotesTabActive = false;
+    private List<ArchivoDTO> _allFiles = new List<ArchivoDTO>();
+    private ArchivoDTO? _itemToRename;
+    private ArchivoDTO? _itemToMove;
 
     public MainWindow()
     {
@@ -573,13 +576,19 @@ public partial class MainWindow : Window
 
             var json = await response.Content.ReadAsStringAsync();
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var files = JsonSerializer.Deserialize<List<ArchivoDTO>>(json, options);
+            var rawFiles = JsonSerializer.Deserialize<List<ArchivoDTO>>(json, options) ?? new List<ArchivoDTO>();
+
+            // Orden alfabético garantizado: Carpetas primero A-Z, luego Archivos A-Z
+            _allFiles = rawFiles
+                .OrderByDescending(f => f.EsCarpeta)
+                .ThenBy(f => f.Nombre, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
             
-            LstFiles.ItemsSource = files;
+            ApplyFileFilter();
             TxtCurrentPath.Text = string.IsNullOrEmpty(_currentPath) ? "/" : "/" + _currentPath;
             BtnParentFolder.IsVisible = !string.IsNullOrEmpty(_currentPath);
-            TxtStatus.Text = $"{files?.Count ?? 0} elementos";
-            TxtDragHint.IsVisible = (files == null || files.Count == 0);
+            TxtStatus.Text = $"{_allFiles.Count} elementos";
+            TxtDragHint.IsVisible = (_allFiles.Count == 0);
         }
         catch (Exception ex)
         {
@@ -587,10 +596,38 @@ public partial class MainWindow : Window
         }
     }
 
+    private void ApplyFileFilter()
+    {
+        string query = TxtSearchFiles.Text?.Trim() ?? string.Empty;
+        BtnClearSearch.IsVisible = !string.IsNullOrEmpty(query);
+
+        if (string.IsNullOrEmpty(query))
+        {
+            LstFiles.ItemsSource = _allFiles;
+        }
+        else
+        {
+            var filtered = _allFiles.Where(f => f.Nombre.Contains(query, StringComparison.CurrentCultureIgnoreCase)).ToList();
+            LstFiles.ItemsSource = filtered;
+        }
+    }
+
+    private void TxtSearchFiles_TextChanged(object? sender, TextChangedEventArgs e)
+    {
+        ApplyFileFilter();
+    }
+
+    private void BtnClearSearch_Click(object? sender, RoutedEventArgs e)
+    {
+        TxtSearchFiles.Text = string.Empty;
+        ApplyFileFilter();
+    }
+
     private async void LstFiles_DoubleTapped(object? sender, TappedEventArgs e)
     {
         if (LstFiles.SelectedItem is ArchivoDTO { EsCarpeta: true } folder)
         {
+            TxtSearchFiles.Text = string.Empty;
             _currentPath = string.IsNullOrEmpty(_currentPath) ? folder.Nombre : $"{_currentPath}/{folder.Nombre}";
             await LoadFilesAsync();
         }
@@ -598,6 +635,7 @@ public partial class MainWindow : Window
 
     private async void BtnParentFolder_Click(object? sender, RoutedEventArgs e)
     {
+        TxtSearchFiles.Text = string.Empty;
         int separator = _currentPath.LastIndexOf('/');
         _currentPath = separator < 0 ? string.Empty : _currentPath.Substring(0, separator);
         await LoadFilesAsync();
@@ -928,6 +966,240 @@ public partial class MainWindow : Window
             }
         }
     }
+
+    #region Nueva Carpeta
+    private void BtnNewFolder_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_role == "Visitante")
+        {
+            TxtStatus.Text = "Permiso denegado: Los visitantes no pueden crear carpetas.";
+            return;
+        }
+
+        TxtNewFolderName.Text = string.Empty;
+        TxtNewFolderError.IsVisible = false;
+        NewFolderModal.IsVisible = true;
+    }
+
+    private void BtnCancelNewFolder_Click(object? sender, RoutedEventArgs e)
+    {
+        NewFolderModal.IsVisible = false;
+    }
+
+    private async void BtnConfirmNewFolder_Click(object? sender, RoutedEventArgs e)
+    {
+        string name = TxtNewFolderName.Text?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            TxtNewFolderError.Text = "Introduce un nombre para la carpeta.";
+            TxtNewFolderError.IsVisible = true;
+            return;
+        }
+
+        if (name.Contains("/") || name.Contains("\\"))
+        {
+            TxtNewFolderError.Text = "El nombre no puede contener barras.";
+            TxtNewFolderError.IsVisible = true;
+            return;
+        }
+
+        try
+        {
+            string folderPath = GetRemotePath(name);
+            var response = await _httpClient.PostAsync($"/api/folder?path={Uri.EscapeDataString(folderPath)}", null);
+            if (response.IsSuccessStatusCode)
+            {
+                NewFolderModal.IsVisible = false;
+                TxtStatus.Text = $"Carpeta '{name}' creada con éxito.";
+                await LoadFilesAsync();
+            }
+            else
+            {
+                TxtNewFolderError.Text = await GetApiFailureMessageAsync(response);
+                TxtNewFolderError.IsVisible = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            TxtNewFolderError.Text = $"Error: {ex.Message}";
+            TxtNewFolderError.IsVisible = true;
+        }
+    }
+    #endregion
+
+    #region Renombrar
+    private void BtnRename_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_role == "Visitante")
+        {
+            TxtStatus.Text = "Permiso denegado: Los visitantes no pueden renombrar.";
+            return;
+        }
+
+        if (sender is MenuItem menuItem && menuItem.DataContext is ArchivoDTO dto)
+        {
+            _itemToRename = dto;
+            TxtRenameTitle.Text = dto.EsCarpeta ? "✏️ Renombrar Carpeta" : "✏️ Renombrar Archivo";
+            TxtNewItemName.Text = dto.Nombre;
+            TxtRenameError.IsVisible = false;
+            RenameModal.IsVisible = true;
+        }
+    }
+
+    private void BtnCancelRename_Click(object? sender, RoutedEventArgs e)
+    {
+        _itemToRename = null;
+        RenameModal.IsVisible = false;
+    }
+
+    private async void BtnConfirmRename_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_itemToRename == null)
+        {
+            RenameModal.IsVisible = false;
+            return;
+        }
+
+        string newName = TxtNewItemName.Text?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(newName))
+        {
+            TxtRenameError.Text = "Introduce un nombre válido.";
+            TxtRenameError.IsVisible = true;
+            return;
+        }
+
+        if (newName.Contains("/") || newName.Contains("\\"))
+        {
+            TxtRenameError.Text = "El nombre no puede contener barras.";
+            TxtRenameError.IsVisible = true;
+            return;
+        }
+
+        if (newName.Equals(_itemToRename.Nombre, StringComparison.Ordinal))
+        {
+            RenameModal.IsVisible = false;
+            return;
+        }
+
+        try
+        {
+            string oldPath = GetRemotePath(_itemToRename.Nombre);
+            var response = await _httpClient.PostAsync($"/api/rename?path={Uri.EscapeDataString(oldPath)}&newname={Uri.EscapeDataString(newName)}", null);
+            if (response.IsSuccessStatusCode)
+            {
+                RenameModal.IsVisible = false;
+                _itemToRename = null;
+                TxtStatus.Text = "Elemento renombrado correctamente.";
+                await LoadFilesAsync();
+            }
+            else
+            {
+                TxtRenameError.Text = await GetApiFailureMessageAsync(response);
+                TxtRenameError.IsVisible = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            TxtRenameError.Text = $"Error: {ex.Message}";
+            TxtRenameError.IsVisible = true;
+        }
+    }
+    #endregion
+
+    #region Mover
+    private void BtnMove_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_role == "Visitante")
+        {
+            TxtStatus.Text = "Permiso denegado: Los visitantes no pueden mover archivos.";
+            return;
+        }
+
+        if (sender is MenuItem menuItem && menuItem.DataContext is ArchivoDTO dto)
+        {
+            _itemToMove = dto;
+            TxtMoveTitle.Text = $"📦 Mover: {dto.Nombre}";
+            TxtMoveError.IsVisible = false;
+
+            // Listar opciones de carpetas destino disponibles
+            var destinations = new List<string>();
+            
+            // Opción de subir a la carpeta raíz o carpeta padre
+            destinations.Add("/");
+            if (!string.IsNullOrEmpty(_currentPath))
+            {
+                int sep = _currentPath.LastIndexOf('/');
+                string parent = sep < 0 ? "/" : "/" + _currentPath.Substring(0, sep);
+                if (!destinations.Contains(parent)) destinations.Add(parent);
+                destinations.Add("/" + _currentPath);
+            }
+
+            // Carpetas hijas dentro de la vista actual
+            foreach (var f in _allFiles.Where(f => f.EsCarpeta))
+            {
+                // Si movemos una carpeta, no puede moverse dentro de sí misma
+                if (dto.EsCarpeta && f.Nombre.Equals(dto.Nombre, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                string sub = string.IsNullOrEmpty(_currentPath) ? "/" + f.Nombre : $"/{_currentPath}/{f.Nombre}";
+                if (!destinations.Contains(sub)) destinations.Add(sub);
+            }
+
+            LstMoveDestinations.ItemsSource = destinations;
+            LstMoveDestinations.SelectedIndex = 0;
+            MoveModal.IsVisible = true;
+        }
+    }
+
+    private void BtnCancelMove_Click(object? sender, RoutedEventArgs e)
+    {
+        _itemToMove = null;
+        MoveModal.IsVisible = false;
+    }
+
+    private async void BtnConfirmMove_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_itemToMove == null)
+        {
+            MoveModal.IsVisible = false;
+            return;
+        }
+
+        string? selectedTarget = LstMoveDestinations.SelectedItem as string;
+        if (string.IsNullOrEmpty(selectedTarget))
+        {
+            TxtMoveError.Text = "Selecciona una carpeta destino.";
+            TxtMoveError.IsVisible = true;
+            return;
+        }
+
+        // Sanitizar destino: "/" o "" es la raíz
+        string targetDir = selectedTarget.TrimStart('/');
+
+        try
+        {
+            string sourcePath = GetRemotePath(_itemToMove.Nombre);
+            var response = await _httpClient.PostAsync($"/api/move?path={Uri.EscapeDataString(sourcePath)}&target={Uri.EscapeDataString(targetDir)}", null);
+            if (response.IsSuccessStatusCode)
+            {
+                MoveModal.IsVisible = false;
+                _itemToMove = null;
+                TxtStatus.Text = "Elemento movido exitosamente.";
+                await LoadFilesAsync();
+            }
+            else
+            {
+                TxtMoveError.Text = await GetApiFailureMessageAsync(response);
+                TxtMoveError.IsVisible = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            TxtMoveError.Text = $"Error: {ex.Message}";
+            TxtMoveError.IsVisible = true;
+        }
+    }
+    #endregion
 
     private void ShowTransfer(string message)
     {

@@ -24,6 +24,7 @@ public partial class MainPage : ContentPage
     private readonly SemaphoreSlim _thumbnailSlots = new SemaphoreSlim(2, 2);
     private List<DiscoveryResponse> _discoveredServers = new List<DiscoveryResponse>();
     private bool _isNotesTabActive = false;
+    private List<ArchivoDTO> _allFiles = new List<ArchivoDTO>();
 
     public MainPage()
     {
@@ -621,12 +622,18 @@ public partial class MainPage : ContentPage
 
             var json = await response.Content.ReadAsStringAsync();
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var files = JsonSerializer.Deserialize<List<ArchivoDTO>>(json, options);
+            var rawFiles = JsonSerializer.Deserialize<List<ArchivoDTO>>(json, options) ?? new List<ArchivoDTO>();
+
+            // Orden alfabético: Carpetas primero A-Z, luego Archivos A-Z
+            _allFiles = rawFiles
+                .OrderByDescending(f => f.EsCarpeta)
+                .ThenBy(f => f.Nombre, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
             
-            LstFiles.ItemsSource = files;
+            ApplyFileFilter();
             TxtCurrentPath.Text = string.IsNullOrEmpty(_currentPath) ? "/" : "/" + _currentPath;
             BtnParentFolder.IsVisible = !string.IsNullOrEmpty(_currentPath);
-            TxtStatus.Text = $"{files?.Count ?? 0} elementos";
+            TxtStatus.Text = $"{_allFiles.Count} elementos";
         }
         catch (Exception ex)
         {
@@ -638,11 +645,31 @@ public partial class MainPage : ContentPage
         }
     }
 
+    private void ApplyFileFilter()
+    {
+        string query = TxtSearchFilesMobile.Text?.Trim() ?? string.Empty;
+        if (string.IsNullOrEmpty(query))
+        {
+            LstFiles.ItemsSource = _allFiles;
+        }
+        else
+        {
+            var filtered = _allFiles.Where(f => f.Nombre.Contains(query, StringComparison.CurrentCultureIgnoreCase)).ToList();
+            LstFiles.ItemsSource = filtered;
+        }
+    }
+
+    private void TxtSearchFilesMobile_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        ApplyFileFilter();
+    }
+
     private async void LstFiles_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (e.CurrentSelection.FirstOrDefault() is ArchivoDTO { EsCarpeta: true } folder)
         {
             LstFiles.SelectedItem = null;
+            TxtSearchFilesMobile.Text = string.Empty;
             _currentPath = string.IsNullOrEmpty(_currentPath) ? folder.Nombre : $"{_currentPath}/{folder.Nombre}";
             await LoadFilesAsync();
         }
@@ -650,6 +677,7 @@ public partial class MainPage : ContentPage
 
     private async void BtnParentFolder_Clicked(object sender, EventArgs e)
     {
+        TxtSearchFilesMobile.Text = string.Empty;
         int separator = _currentPath.LastIndexOf('/');
         _currentPath = separator < 0 ? string.Empty : _currentPath.Substring(0, separator);
         await LoadFilesAsync();
@@ -1066,7 +1094,7 @@ public partial class MainPage : ContentPage
             }
             else
             {
-                action = await DisplayActionSheet($"Opciones: {dto.Nombre}", "Cancelar", "Eliminar", "Descargar", "Detalles");
+                action = await DisplayActionSheet($"Opciones: {dto.Nombre}", "Cancelar", "Eliminar", "Descargar", "Renombrar", "Mover a...", "Detalles");
             }
 
             if (action == "Descargar")
@@ -1134,6 +1162,89 @@ public partial class MainPage : ContentPage
                     HideTransfer();
                 }
             }
+            else if (action == "Renombrar")
+            {
+                if (_role == "Visitante")
+                {
+                    await DisplayAlert("Permiso Denegado", "Los visitantes no pueden renombrar.", "OK");
+                    return;
+                }
+
+                string promptTitle = dto.EsCarpeta ? "Renombrar carpeta" : "Renombrar archivo";
+                string newName = await DisplayPromptAsync(promptTitle, "Escribe el nuevo nombre:", "Guardar", "Cancelar", initialValue: dto.Nombre);
+                if (!string.IsNullOrWhiteSpace(newName) && !newName.Equals(dto.Nombre, StringComparison.Ordinal))
+                {
+                    if (newName.Contains("/") || newName.Contains("\\"))
+                    {
+                        await DisplayAlert("Nombre inválido", "El nombre no debe contener barras.", "OK");
+                        return;
+                    }
+
+                    try
+                    {
+                        string oldPath = GetRemotePath(dto.Nombre);
+                        var response = await _httpClient.PostAsync($"/api/rename?path={Uri.EscapeDataString(oldPath)}&newname={Uri.EscapeDataString(newName.Trim())}", null);
+                        response.EnsureSuccessStatusCode();
+                        TxtStatus.Text = "Renombrado correctamente";
+                        await LoadFilesAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        await DisplayAlert("Error", $"No se pudo renombrar: {ex.Message}", "OK");
+                    }
+                }
+            }
+            else if (action == "Mover a...")
+            {
+                if (_role == "Visitante")
+                {
+                    await DisplayAlert("Permiso Denegado", "Los visitantes no pueden mover archivos.", "OK");
+                    return;
+                }
+
+                var options = new List<string>();
+                options.Add("📁 / (Raíz)");
+
+                if (!string.IsNullOrEmpty(_currentPath))
+                {
+                    int sep = _currentPath.LastIndexOf('/');
+                    string parent = sep < 0 ? "/" : "/" + _currentPath.Substring(0, sep);
+                    options.Add($"📁 {parent} (Carpeta superior)");
+                }
+
+                foreach (var folder in _allFiles.Where(f => f.EsCarpeta))
+                {
+                    if (dto.EsCarpeta && folder.Nombre.Equals(dto.Nombre, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    string fullSub = string.IsNullOrEmpty(_currentPath) ? "/" + folder.Nombre : $"/{_currentPath}/{folder.Nombre}";
+                    if (!options.Any(o => o.Contains(fullSub)))
+                    {
+                        options.Add($"📁 {fullSub}");
+                    }
+                }
+
+                string destChoice = await DisplayActionSheet($"Mover '{dto.Nombre}' a:", "Cancelar", null, options.ToArray());
+                if (!string.IsNullOrEmpty(destChoice) && destChoice != "Cancelar")
+                {
+                    string target = destChoice.Replace("📁 ", "").Replace(" (Carpeta superior)", "").Replace(" (Raíz)", "").Trim();
+                    if (target == "/") target = "";
+                    else target = target.TrimStart('/');
+
+                    try
+                    {
+                        string sourcePath = GetRemotePath(dto.Nombre);
+                        var response = await _httpClient.PostAsync($"/api/move?path={Uri.EscapeDataString(sourcePath)}&target={Uri.EscapeDataString(target)}", null);
+                        response.EnsureSuccessStatusCode();
+                        TxtStatus.Text = "Movido exitosamente";
+                        await LoadFilesAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        await DisplayAlert("Error", $"No se pudo mover: {ex.Message}", "OK");
+                    }
+                }
+            }
             else if (action == "Eliminar")
             {
                 if (_role == "Visitante")
@@ -1161,6 +1272,39 @@ public partial class MainPage : ContentPage
             else if (action == "Detalles")
             {
                 await DisplayAlert("Detalles", $"Nombre: {dto.Nombre}\nSubido por: {dto.ModificadoPor}\nPeso: {dto.PesoBytes} bytes\nFecha: {dto.FechaModificacion}", "OK");
+            }
+        }
+    }
+
+    private async void BtnNewFolderMobile_Clicked(object sender, EventArgs e)
+    {
+        if (_role == "Visitante")
+        {
+            await DisplayAlert("Permiso Denegado", "Los visitantes no pueden crear carpetas.", "OK");
+            return;
+        }
+
+        string folderName = await DisplayPromptAsync("Nueva Carpeta", "Ingresa el nombre de la nueva carpeta:", "Crear", "Cancelar", placeholder: "Ej. Documentos");
+        if (!string.IsNullOrWhiteSpace(folderName))
+        {
+            string name = folderName.Trim();
+            if (name.Contains("/") || name.Contains("\\"))
+            {
+                await DisplayAlert("Nombre inválido", "El nombre de la carpeta no puede contener barras.", "OK");
+                return;
+            }
+
+            try
+            {
+                string folderPath = GetRemotePath(name);
+                var response = await _httpClient.PostAsync($"/api/folder?path={Uri.EscapeDataString(folderPath)}", null);
+                response.EnsureSuccessStatusCode();
+                TxtStatus.Text = $"Carpeta '{name}' creada";
+                await LoadFilesAsync();
+            }
+            catch (Exception ex)
+            {
+                await DisplayAlert("Error", $"No se pudo crear la carpeta: {ex.Message}", "OK");
             }
         }
     }

@@ -7,7 +7,7 @@
     Title="NubeZero.Mobile">
 
     <ShellContent
-        Title="Home"
+        Title="NubeZero"
         ContentTemplate="{DataTemplate local:MainPage}"
         Route="MainPage" />
 

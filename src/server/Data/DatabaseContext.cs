@@ -502,8 +502,20 @@ namespace NubeZero.Server.Data
                 if (meta != null)
                 {
                     meta.FilePath = newPath;
-                    Save();
                 }
+
+                // Si oldPath era un directorio, actualizar rutas hijas en metadatos
+                string oldPrefix = oldPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                string newPrefix = newPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                foreach (var item in _state.FileMetadata)
+                {
+                    if (item.FilePath != null && item.FilePath.StartsWith(oldPrefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        item.FilePath = newPrefix + item.FilePath.Substring(oldPrefix.Length);
+                    }
+                }
+
+                Save();
             }
         }
 

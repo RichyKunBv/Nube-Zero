@@ -272,6 +272,16 @@ namespace NubeZero.Server
                     string newName = request.QueryString["newname"] ?? "";
                     await _fileController.HandleRenameAsync(context, reqPath, newName);
                 }
+                else if (request.Url.AbsolutePath == "/api/move" && request.HttpMethod == "POST")
+                {
+                    if (session.Role == "Visitante")
+                    {
+                        await _authInterceptor.WriteForbiddenAsync(response, "Los visitantes solo tienen permisos de descarga.");
+                        return;
+                    }
+                    string target = request.QueryString["target"] ?? "";
+                    await _fileController.HandleMoveAsync(context, reqPath, target);
+                }
                 else if (request.Url.AbsolutePath == "/api/status" && request.HttpMethod == "GET")
                 {
                     response.ContentType = "application/json";
