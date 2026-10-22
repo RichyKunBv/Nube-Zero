@@ -1,6 +1,6 @@
 # Nube-Zero ☁️
 
-[![Versión](https://img.shields.io/badge/Versión-v0.7.8-blue.svg)](https://github.com/RichyKunBv/Nube-Zero)
+[![Versión](https://img.shields.io/badge/Versión-v0.8.0-blue.svg)](https://github.com/RichyKunBv/Nube-Zero)
 [![Status](https://img.shields.io/badge/Estado-Desarrollo-yellow.svg)](https://github.com/RichyKunBv/Nube-Zero)
 
 ---
@@ -14,6 +14,13 @@
 
 ## ✨ Características Principales
 
+- 🚀 **Experiencia y Usabilidad Tipo Mega / MediaFire (v0.8.0)**:
+  - 🔤 **Orden Alfabético Inteligente**: Listado organizado de forma clara y predecible; carpetas ordenadas de la A a la Z primero, seguidas por los archivos de la A a la Z en todos los clientes y servidor.
+  - 🔍 **Buscador y Filtro en Tiempo Real**: Barra de búsqueda rápida integrada en la vista de archivos tanto en PC como en móvil para encontrar al instante cualquier elemento.
+  - 📁 **Creación de Carpetas desde la UI**: Botón directo para crear nuevas subcarpetas interactivamente sin salir de la app.
+  - 📦 **Mover Archivos y Carpetas**: Nuevo endpoint `/api/move` y menú contextual para reubicar archivos o directorios completos entre carpetas con actualización automática de metadatos.
+  - ✏️ **Renombrar**: Función para cambiar el nombre de cualquier archivo o carpeta desde el menú de opciones (`⋮`).
+  - 📜 **Scroll y Accesibilidad en Login**: Barra de desplazamiento visible en la pantalla de inicio de sesión para pantallas pequeñas o cuando se despliega el teclado virtual en Android y PC.
 - 📦 **Subida de archivos grandes (v0.7.1)**: transferencias en streaming con un timeout ampliado para evitar cortes en archivos de varios cientos de MB.
 - 🔐 **Recordar credenciales de forma segura (v0.7.1)**: opción para guardar la contraseña en el almacenamiento seguro de Android o en el llavero de macOS y recuperar la sesión al volver a abrir la aplicación.
 - 📥 **Descargas Android más fiables (v0.7.1)**: selector nativo para guardar directamente en Descargas u otra ubicación, sin depender del menú Compartir del fabricante.
