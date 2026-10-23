@@ -666,13 +666,33 @@ public partial class MainPage : ContentPage
 
     private async void LstFiles_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (e.CurrentSelection.FirstOrDefault() is ArchivoDTO { EsCarpeta: true } folder)
+        var selected = e.CurrentSelection.FirstOrDefault() as ArchivoDTO;
+        LstFiles.SelectedItem = null;
+        if (selected != null && selected.EsCarpeta)
         {
-            LstFiles.SelectedItem = null;
-            TxtSearchFilesMobile.Text = string.Empty;
-            _currentPath = string.IsNullOrEmpty(_currentPath) ? folder.Nombre : $"{_currentPath}/{folder.Nombre}";
-            await LoadFilesAsync();
+            await OpenFolderAsync(selected.Nombre);
         }
+    }
+
+    private async void OnFileItemTapped(object? sender, TappedEventArgs e)
+    {
+        ArchivoDTO? item = e.Parameter as ArchivoDTO;
+        if (item == null && sender is Element elem)
+        {
+            item = elem.BindingContext as ArchivoDTO;
+        }
+
+        if (item != null && item.EsCarpeta)
+        {
+            await OpenFolderAsync(item.Nombre);
+        }
+    }
+
+    private async Task OpenFolderAsync(string folderName)
+    {
+        TxtSearchFilesMobile.Text = string.Empty;
+        _currentPath = string.IsNullOrEmpty(_currentPath) ? folderName : $"{_currentPath}/{folderName}";
+        await LoadFilesAsync();
     }
 
     private async void BtnParentFolder_Clicked(object sender, EventArgs e)

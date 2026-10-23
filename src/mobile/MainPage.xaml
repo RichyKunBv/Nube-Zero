@@ -65,6 +65,9 @@
                         <CollectionView.ItemTemplate>
                             <DataTemplate x:DataType="shared:ArchivoDTO">
                                 <Frame Margin="0,5" Padding="10" BackgroundColor="#10FFFFFF" BorderColor="#20FFFFFF" CornerRadius="10" Loaded="FileItem_Loaded" BindingContextChanged="FileItem_Loaded">
+                                    <Frame.GestureRecognizers>
+                                        <TapGestureRecognizer Tapped="OnFileItemTapped" CommandParameter="{Binding .}"/>
+                                    </Frame.GestureRecognizers>
                                     <Grid ColumnDefinitions="Auto, *, Auto">
                                         <Grid Grid.Column="0" WidthRequest="48" HeightRequest="48" Margin="0,0,12,0">
                                             <Image Source="{Binding ThumbnailSource}" Aspect="AspectFill"/>
