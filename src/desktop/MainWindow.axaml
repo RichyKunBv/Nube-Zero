@@ -3,7 +3,9 @@
         xmlns:shared="clr-namespace:NubeZero.Shared;assembly=NubeZero.Shared"
         x:Class="NubeZero.Desktop.MainWindow"
         Icon="/Assets/icon.ico"
-        Title="NubeZero" Width="950" Height="650"
+        Title="NubeZero" Width="1050" Height="700"
+        MinWidth="800" MinHeight="550"
+        WindowState="Maximized"
         Background="#121212"
         TransparencyLevelHint="Mica, AcrylicBlur, None"
         ExtendClientAreaToDecorationsHint="True"
@@ -57,99 +59,182 @@
         <!-- VISTA PRINCIPAL (Sólo visible si IsLoggedIn = True) -->
         <Grid Name="MainView" IsVisible="False" RowDefinitions="Auto, *, Auto">
             
-            <!-- HEADER -->
-            <Border Grid.Row="0" Margin="20,40,20,10" Background="#20FFFFFF" CornerRadius="12" Padding="15">
-                <Grid ColumnDefinitions="*, Auto">
-                    <StackPanel Orientation="Horizontal" Spacing="15" VerticalAlignment="Center">
-                        <TextBlock Text="☁️ Nube-Zero" FontSize="24" FontWeight="Black" Foreground="White" />
-                        
-                        <!-- SELECTOR DE PESTAÑAS (ARCHIVOS / NOTAS) -->
-                        <Border Background="#18FFFFFF" CornerRadius="8" Padding="3">
-                            <StackPanel Orientation="Horizontal" Spacing="3">
-                                <Button Name="BtnTabFiles" Content="📁 Archivos" Click="BtnTabFiles_Click" Background="#00D2FF" Foreground="White" FontWeight="Bold" CornerRadius="6" Padding="12,6"/>
-                                <Button Name="BtnTabNotes" Content="💬 Notas" Click="BtnTabNotes_Click" Background="Transparent" Foreground="#A0A0A0" FontWeight="SemiBold" CornerRadius="6" Padding="12,6"/>
-                            </StackPanel>
-                        </Border>
+            <!-- HEADER RESPONSIVO -->
+            <Border Grid.Row="0" Margin="20,40,20,10" Background="#20FFFFFF" CornerRadius="12" Padding="14,10">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                    <Grid ColumnDefinitions="Auto, *, Auto">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+                            <TextBlock Text="☁️ Nube-Zero" FontSize="22" FontWeight="Black" Foreground="White" VerticalAlignment="Center"/>
+                            
+                            <!-- SELECTOR DE PESTAÑAS (ARCHIVOS / NOTAS) -->
+                            <Border Background="#18FFFFFF" CornerRadius="8" Padding="3" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                    <Button Name="BtnTabFiles" Content="📁 Archivos" Click="BtnTabFiles_Click" Background="#00D2FF" Foreground="White" FontWeight="Bold" CornerRadius="6" Padding="12,6"/>
+                                    <Button Name="BtnTabNotes" Content="💬 Notas" Click="BtnTabNotes_Click" Background="Transparent" Foreground="#A0A0A0" FontWeight="SemiBold" CornerRadius="6" Padding="12,6"/>
+                                </StackPanel>
+                            </Border>
 
-                        <TextBlock Name="TxtUserInfo" Text="" VerticalAlignment="Center" Foreground="#00D2FF" FontSize="13" FontWeight="SemiBold"/>
-                        <TextBlock Name="TxtStatus" Text="Conectado" VerticalAlignment="Center" Foreground="#A0A0A0" FontSize="13"/>
-                    </StackPanel>
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
-                        <Button Name="BtnCheckUpdatesMain" Content="⬇ Actualizar" Click="BtnCheckUpdates_Click" Background="#30FFFFFF" Foreground="White" CornerRadius="8"/>
-                        <Button Content="🔄 Recargar" Click="BtnRefresh_Click" Background="#30FFFFFF" Foreground="White" CornerRadius="8"/>
-                        <Button Name="BtnUsersAdmin" Content="👥 Usuarios" Click="BtnUsersAdmin_Click" Background="#30FFFFFF" Foreground="White" CornerRadius="8" IsVisible="False"/>
-                        <Button Content="🔑 Contraseña" Click="BtnOpenChangePassword_Click" Background="#30FFFFFF" Foreground="White" CornerRadius="8"/>
-                        <Button Content="Salir" Click="BtnLogout_Click" Background="#FF5555" Foreground="White" CornerRadius="8"/>
-                    </StackPanel>
-                </Grid>
+                            <Border Background="#1500D2FF" CornerRadius="6" Padding="8,4" VerticalAlignment="Center">
+                                <TextBlock Name="TxtUserInfo" Text="" Foreground="#00D2FF" FontSize="12" FontWeight="SemiBold"/>
+                            </Border>
+                            <TextBlock Name="TxtStatus" Text="Conectado" VerticalAlignment="Center" Foreground="#888888" FontSize="12"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="10,0,0,0">
+                            <Button Name="BtnCheckUpdatesMain" Content="⬇ Actualizar" Click="BtnCheckUpdates_Click" Background="#25FFFFFF" Foreground="White" CornerRadius="8" Padding="10,6" FontSize="12"/>
+                            <Button Content="🔄 Recargar" Click="BtnRefresh_Click" Background="#25FFFFFF" Foreground="White" CornerRadius="8" Padding="10,6" FontSize="12"/>
+                            <Button Name="BtnUsersAdmin" Content="👥 Usuarios" Click="BtnUsersAdmin_Click" Background="#25FFFFFF" Foreground="White" CornerRadius="8" IsVisible="False" Padding="10,6" FontSize="12"/>
+                            <Button Content="🔑 Contraseña" Click="BtnOpenChangePassword_Click" Background="#25FFFFFF" Foreground="White" CornerRadius="8" Padding="10,6" FontSize="12"/>
+                            <Button Content="Salir" Click="BtnLogout_Click" Background="#FF5555" Foreground="White" CornerRadius="8" Padding="12,6" FontWeight="SemiBold" FontSize="12"/>
+                        </StackPanel>
+                    </Grid>
+                </ScrollViewer>
             </Border>
 
             <!-- ZONA DRAG & DROP Y LISTADO DE ARCHIVOS -->
             <Border Name="FilesContainer" Grid.Row="1" Margin="20,10" Background="#10FFFFFF" CornerRadius="12" BorderBrush="#20FFFFFF" BorderThickness="1" IsVisible="True">
-                <Grid RowDefinitions="Auto, *">
+                <Grid RowDefinitions="Auto, Auto, *">
                     <!-- BARRA SUPERIOR DE ACCIONES Y NAVEGACIÓN -->
-                    <Grid Grid.Row="0" Margin="12,10" ColumnDefinitions="Auto, *, Auto, Auto">
+                    <Grid Grid.Row="0" Margin="14,10" ColumnDefinitions="Auto, *, Auto, Auto">
                         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                             <Button Name="BtnParentFolder" Content="↑" ToolTip.Tip="Carpeta anterior" Click="BtnParentFolder_Click" IsVisible="False" Background="#25FFFFFF" Foreground="White" CornerRadius="6" Padding="10,6"/>
                             <TextBlock Name="TxtCurrentPath" Text="/" VerticalAlignment="Center" Foreground="#00D2FF" FontWeight="SemiBold" FontSize="14"/>
                         </StackPanel>
 
                         <!-- BUSCADOR RÁPIDO DE ARCHIVOS -->
-                        <Border Grid.Column="1" Margin="20,0" Background="#15FFFFFF" CornerRadius="8" Padding="2" HorizontalAlignment="Stretch" MaxWidth="360">
+                        <Border Grid.Column="1" Margin="20,0" Background="#18FFFFFF" CornerRadius="8" Padding="2" HorizontalAlignment="Stretch" MaxWidth="380">
                             <Grid ColumnDefinitions="Auto, *, Auto">
-                                <TextBlock Grid.Column="0" Text="🔍" VerticalAlignment="Center" Margin="8,0,4,0" Foreground="#80FFFFFF" FontSize="13"/>
+                                <TextBlock Grid.Column="0" Text="🔍" VerticalAlignment="Center" Margin="10,0,4,0" Foreground="#80FFFFFF" FontSize="13"/>
                                 <TextBox Grid.Column="1" Name="TxtSearchFiles" PlaceholderText="Buscar archivo o carpeta..." Background="Transparent" BorderThickness="0" Foreground="White" Padding="6,6" TextChanged="TxtSearchFiles_TextChanged"/>
                                 <Button Grid.Column="2" Name="BtnClearSearch" Content="✕" Click="BtnClearSearch_Click" Background="Transparent" Foreground="#A0A0A0" Padding="8,4" CornerRadius="6" IsVisible="False"/>
                             </Grid>
                         </Border>
 
-                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8">
-                            <Button Name="BtnNewFolder" Content="📁+ Nueva Carpeta" Click="BtnNewFolder_Click" Background="#25FFFFFF" Foreground="White" FontWeight="SemiBold" CornerRadius="8" Padding="12,6"/>
+                        <!-- CONTROLES DE VISTA Y ORDENACIÓN -->
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" Margin="0,0,10,0" VerticalAlignment="Center">
+                            <ComboBox Name="CmbSortFiles" SelectionChanged="CmbSortFiles_SelectionChanged" SelectedIndex="0" Background="#20FFFFFF" Foreground="White" CornerRadius="6" Padding="8,5" ToolTip.Tip="Ordenar archivos">
+                                <ComboBoxItem Content="🔤 Nombre"/>
+                                <ComboBoxItem Content="📅 Recientes"/>
+                                <ComboBoxItem Content="⚖️ Tamaño"/>
+                            </ComboBox>
+                            <Button Name="BtnToggleViewMode" Content="⊞ Cuadrícula" Click="BtnToggleViewMode_Click" Background="#25FFFFFF" Foreground="White" CornerRadius="6" Padding="10,6" ToolTip.Tip="Cambiar entre lista y cuadrícula"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Button Name="BtnNewFolder" Content="📁+ Carpeta" Click="BtnNewFolder_Click" Background="#25FFFFFF" Foreground="White" FontWeight="SemiBold" CornerRadius="8" Padding="12,6"/>
                             <Button Name="BtnUploadTop" Content="⬆ Subir" Click="BtnUploadManual_Click" Background="#00D2FF" Foreground="White" FontWeight="Bold" CornerRadius="8" Padding="14,6"/>
                         </StackPanel>
                     </Grid>
 
-                    <TextBlock Grid.Row="1" Name="TxtDragHint" Text="Arrastra tus archivos aquí o crea carpetas" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="18" Foreground="#40FFFFFF" FontWeight="Bold" IsVisible="True"/>
-                    <ListBox Grid.Row="1" Name="LstFiles" Background="Transparent" BorderThickness="0" Margin="5" DoubleTapped="LstFiles_DoubleTapped">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate DataType="shared:ArchivoDTO">
-                                <Grid ColumnDefinitions="48, *, Auto" Margin="5" AttachedToVisualTree="FileRow_AttachedToVisualTree">
-                                    <Image Grid.Column="0" Source="{Binding ThumbnailSource}" Width="42" Height="42" Stretch="UniformToFill" Margin="0,0,6,0"/>
-                                    <TextBlock Grid.Column="0" Text="{Binding Icono}" FontSize="24" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                                    
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding Nombre}" FontWeight="SemiBold" FontSize="16" Foreground="White"/>
-                                        <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,2,0,0">
-                                            <TextBlock Text="{Binding PesoBytes, Converter={StaticResource BytesToSizeConverter}}" FontSize="12" Foreground="#A0A0A0"/>
-                                            <TextBlock Text="•" Foreground="#606060"/>
-                                            <TextBlock Text="{Binding FechaModificacion, StringFormat='dd/MM/yyyy HH:mm'}" FontSize="12" Foreground="#A0A0A0"/>
-                                            <TextBlock Text="•" Foreground="#606060"/>
-                                            <TextBlock Text="{Binding ModificadoPor, StringFormat='Subido por: {0}'}" FontSize="12" Foreground="#00D2FF"/>
+                    <!-- CHIPS DE FILTRO POR CATEGORÍA -->
+                    <Border Grid.Row="1" Margin="14,0,14,10" Background="Transparent">
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Button Name="BtnCatAll" Content="✨ Todos" Click="BtnFilterCategory_Click" Tag="Todos" Background="#00D2FF" Foreground="White" CornerRadius="12" Padding="12,4" FontWeight="Bold" FontSize="12"/>
+                                <Button Name="BtnCatImages" Content="🖼️ Imágenes" Click="BtnFilterCategory_Click" Tag="Imágenes" Background="#18FFFFFF" Foreground="#CCCCCC" CornerRadius="12" Padding="12,4" FontSize="12"/>
+                                <Button Name="BtnCatVideos" Content="🎬 Videos" Click="BtnFilterCategory_Click" Tag="Videos" Background="#18FFFFFF" Foreground="#CCCCCC" CornerRadius="12" Padding="12,4" FontSize="12"/>
+                                <Button Name="BtnCatDocs" Content="📃 Documentos" Click="BtnFilterCategory_Click" Tag="Documentos" Background="#18FFFFFF" Foreground="#CCCCCC" CornerRadius="12" Padding="12,4" FontSize="12"/>
+                                <Button Name="BtnCatApks" Content="📱 APKs" Click="BtnFilterCategory_Click" Tag="APKs" Background="#18FFFFFF" Foreground="#CCCCCC" CornerRadius="12" Padding="12,4" FontSize="12"/>
+                                <Button Name="BtnCatZips" Content="🗜️ Comprimidos" Click="BtnFilterCategory_Click" Tag="Comprimidos" Background="#18FFFFFF" Foreground="#CCCCCC" CornerRadius="12" Padding="12,4" FontSize="12"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+
+                    <!-- CONTENEDOR DE ELEMENTOS (LISTA Y GRID) -->
+                    <Grid Grid.Row="2">
+                        <TextBlock Name="TxtDragHint" Text="Arrastra tus archivos aquí o crea carpetas" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="18" Foreground="#40FFFFFF" FontWeight="Bold" IsVisible="True"/>
+                        
+                        <!-- MODO LISTA -->
+                        <ListBox Name="LstFiles" Background="Transparent" BorderThickness="0" Margin="5" DoubleTapped="LstFiles_DoubleTapped" IsVisible="True">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate DataType="shared:ArchivoDTO">
+                                    <Grid ColumnDefinitions="48, *, Auto" Margin="5" AttachedToVisualTree="FileRow_AttachedToVisualTree">
+                                        <Image Grid.Column="0" Source="{Binding ThumbnailSource}" Width="42" Height="42" Stretch="UniformToFill" Margin="0,0,6,0"/>
+                                        <TextBlock Grid.Column="0" Text="{Binding Icono}" FontSize="24" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                        
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Nombre}" FontWeight="SemiBold" FontSize="16" Foreground="White"/>
+                                            <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,2,0,0">
+                                                <TextBlock Text="{Binding PesoBytes, Converter={StaticResource BytesToSizeConverter}}" FontSize="12" Foreground="#A0A0A0"/>
+                                                <TextBlock Text="•" Foreground="#606060"/>
+                                                <TextBlock Text="{Binding FechaModificacion, StringFormat='dd/MM/yyyy HH:mm'}" FontSize="12" Foreground="#A0A0A0"/>
+                                                <TextBlock Text="•" Foreground="#606060"/>
+                                                <TextBlock Text="{Binding ModificadoPor, StringFormat='Subido por: {0}'}" FontSize="12" Foreground="#00D2FF"/>
+                                            </StackPanel>
                                         </StackPanel>
-                                    </StackPanel>
-                                    
-                                    <Button Grid.Column="2" Content="⋮" Background="Transparent" Foreground="White" FontSize="20" VerticalAlignment="Center" CornerRadius="15">
-                                        <Button.Flyout>
-                                            <MenuFlyout>
-                                                <MenuItem Header="📥 Descargar" Click="BtnDownload_Click"/>
-                                                <MenuItem Header="✏️ Renombrar" Click="BtnRename_Click"/>
-                                                <MenuItem Header="📦 Mover a..." Click="BtnMove_Click"/>
-                                                <MenuItem Header="🗑️ Eliminar" Click="BtnDelete_Click" Foreground="#FF5555"/>
-                                            </MenuFlyout>
-                                        </Button.Flyout>
-                                    </Button>
-                                </Grid>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                                        
+                                        <Button Grid.Column="2" Content="⋮" Background="Transparent" Foreground="White" FontSize="20" VerticalAlignment="Center" CornerRadius="15">
+                                            <Button.Flyout>
+                                                <MenuFlyout>
+                                                    <MenuItem Header="📥 Descargar" Click="BtnDownload_Click"/>
+                                                    <MenuItem Header="✏️ Renombrar" Click="BtnRename_Click"/>
+                                                    <MenuItem Header="📦 Mover a..." Click="BtnMove_Click"/>
+                                                    <MenuItem Header="🗑️ Eliminar" Click="BtnDelete_Click" Foreground="#FF5555"/>
+                                                </MenuFlyout>
+                                            </Button.Flyout>
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <!-- MODO CUADRÍCULA / GRID -->
+                        <ListBox Name="LstFilesGrid" Background="Transparent" BorderThickness="0" Margin="10" DoubleTapped="LstFilesGrid_DoubleTapped" IsVisible="False">
+                            <ListBox.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ListBox.ItemsPanel>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate DataType="shared:ArchivoDTO">
+                                    <Border Width="160" Height="175" Margin="6" Background="#16FFFFFF" BorderBrush="#25FFFFFF" BorderThickness="1" CornerRadius="12" Padding="8" AttachedToVisualTree="FileRow_AttachedToVisualTree">
+                                        <Grid RowDefinitions="*, Auto, Auto">
+                                            <Border Grid.Row="0" CornerRadius="8" ClipToBounds="True" Background="#10FFFFFF" Margin="0,0,0,6">
+                                                <Grid>
+                                                    <Image Source="{Binding ThumbnailSource}" Stretch="UniformToFill" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                                                    <TextBlock Text="{Binding Icono}" FontSize="40" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Grid>
+                                            </Border>
+                                            <TextBlock Grid.Row="1" Text="{Binding Nombre}" FontWeight="SemiBold" FontSize="13" Foreground="White" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Nombre}"/>
+                                            <Grid Grid.Row="2" ColumnDefinitions="*, Auto" Margin="0,4,0,0">
+                                                <TextBlock Grid.Column="0" Text="{Binding PesoBytes, Converter={StaticResource BytesToSizeConverter}}" FontSize="11" Foreground="#A0A0A0" VerticalAlignment="Center"/>
+                                                <Button Grid.Column="1" Content="⋮" Background="Transparent" Foreground="White" FontSize="16" Padding="4,0" CornerRadius="10">
+                                                    <Button.Flyout>
+                                                        <MenuFlyout>
+                                                            <MenuItem Header="📥 Descargar" Click="BtnDownload_Click"/>
+                                                            <MenuItem Header="✏️ Renombrar" Click="BtnRename_Click"/>
+                                                            <MenuItem Header="📦 Mover a..." Click="BtnMove_Click"/>
+                                                            <MenuItem Header="🗑️ Eliminar" Click="BtnDelete_Click" Foreground="#FF5555"/>
+                                                        </MenuFlyout>
+                                                    </Button.Flyout>
+                                                </Button>
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
                 </Grid>
             </Border>
 
-            <!-- ZONA NOTAS / PORTAPAPELES EN LA NUBE (FEED TIPO CHAT) -->
+            <!-- ZONA NOTAS / PORTAPAPELES EN LA NUBE (FEED TIPO CHAT CON BÚSQUEDA) -->
             <Border Name="NotesContainer" Grid.Row="1" Margin="20,10" Background="#10FFFFFF" CornerRadius="12" BorderBrush="#20FFFFFF" BorderThickness="1" IsVisible="False">
-                <Grid RowDefinitions="*, Auto">
+                <Grid RowDefinitions="Auto, *, Auto">
+                    <!-- BARRA DE BÚSQUEDA Y TOTAL EN NOTAS -->
+                    <Grid Grid.Row="0" Margin="14,10,14,4" ColumnDefinitions="*, Auto">
+                        <Border Grid.Column="0" Background="#18FFFFFF" CornerRadius="8" Padding="2" HorizontalAlignment="Stretch" MaxWidth="380">
+                            <Grid ColumnDefinitions="Auto, *, Auto">
+                                <TextBlock Grid.Column="0" Text="🔍" VerticalAlignment="Center" Margin="10,0,4,0" Foreground="#80FFFFFF" FontSize="13"/>
+                                <TextBox Grid.Column="1" Name="TxtSearchNotes" PlaceholderText="Buscar en notas y enlaces..." Background="Transparent" BorderThickness="0" Foreground="White" Padding="6,6" TextChanged="TxtSearchNotes_TextChanged"/>
+                                <Button Grid.Column="2" Name="BtnClearSearchNotes" Content="✕" Click="BtnClearSearchNotes_Click" Background="Transparent" Foreground="#A0A0A0" Padding="8,4" CornerRadius="6" IsVisible="False"/>
+                            </Grid>
+                        </Border>
+                        <TextBlock Grid.Column="1" Name="TxtNotesCount" Text="0 notas" Foreground="#A0A0A0" VerticalAlignment="Center" FontSize="12" Margin="10,0,0,0"/>
+                    </Grid>
+
                     <!-- FEED DE NOTAS -->
-                    <ScrollViewer Grid.Row="0" Name="ScrollNotes" VerticalScrollBarVisibility="Auto" Margin="10">
+                    <ScrollViewer Grid.Row="1" Name="ScrollNotes" VerticalScrollBarVisibility="Auto" Margin="10">
                         <StackPanel Spacing="8">
                             <TextBlock Name="TxtNoNotes" Text="No hay notas o enlaces guardados aún. Escribe el primero abajo ✍️" 
                                        HorizontalAlignment="Center" VerticalAlignment="Center" 
@@ -183,7 +268,7 @@
                     </ScrollViewer>
 
                     <!-- BARRA INFERIOR DE ENTRADA -->
-                    <Border Grid.Row="1" Background="#1AFFFFFF" BorderBrush="#25FFFFFF" BorderThickness="0,1,0,0" CornerRadius="0,0,12,12" Padding="12">
+                    <Border Grid.Row="2" Background="#1AFFFFFF" BorderBrush="#25FFFFFF" BorderThickness="0,1,0,0" CornerRadius="0,0,12,12" Padding="12">
                         <Grid ColumnDefinitions="*, Auto">
                             <TextBox Grid.Column="0" Name="TxtNoteInput" 
                                      PlaceholderText="Escribe una nota, texto, enlace o recordatorio... (Enter para enviar, Shift+Enter para salto de línea)" 
@@ -206,11 +291,20 @@
             <!-- BOTÓN FLOTANTE (FAB) -->
             <Button Name="BtnUploadFab" Grid.Row="1" Classes="Fab" Content="+" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,30,30" Click="BtnUploadManual_Click"/>
 
-            <Border Name="TransferPanel" Grid.Row="2" Margin="20,0,20,16" Padding="10,6" Background="#18FFFFFF" CornerRadius="8" IsVisible="False">
-                <StackPanel Spacing="5">
-                    <TextBlock Name="TxtTransferStatus" Foreground="White" FontSize="12"/>
-                    <ProgressBar Name="PrgTransfer" Minimum="0" Maximum="100" Height="6"/>
-                </StackPanel>
+            <!-- PANEL DE TRANSFERENCIA MEJORADO CON VELOCIDAD Y CANCELACIÓN -->
+            <Border Name="TransferPanel" Grid.Row="2" Margin="20,0,20,16" Padding="14,10" Background="#222238" BorderBrush="#4000D2FF" BorderThickness="1" CornerRadius="10" IsVisible="False">
+                <Grid ColumnDefinitions="*, Auto">
+                    <StackPanel Grid.Column="0" Spacing="6">
+                        <Grid ColumnDefinitions="*, Auto">
+                            <TextBlock Name="TxtTransferStatus" Foreground="White" FontSize="12" FontWeight="SemiBold"/>
+                            <Border Grid.Column="1" Background="#2500D2FF" CornerRadius="6" Padding="6,2" Margin="10,0,0,0">
+                                <TextBlock Name="TxtTransferSpeed" Text="0 KB/s" Foreground="#00D2FF" FontSize="11" FontWeight="Bold"/>
+                            </Border>
+                        </Grid>
+                        <ProgressBar Name="PrgTransfer" Minimum="0" Maximum="100" Height="6" CornerRadius="3" Foreground="#00D2FF" Background="#20FFFFFF"/>
+                    </StackPanel>
+                    <Button Grid.Column="1" Name="BtnCancelTransfer" Content="✕ Cancelar" Click="BtnCancelTransfer_Click" Background="#30FF5555" Foreground="#FF7777" FontWeight="Bold" FontSize="11" CornerRadius="6" Padding="10,4" Margin="14,0,0,0" VerticalAlignment="Center"/>
+                </Grid>
             </Border>
         </Grid>
 

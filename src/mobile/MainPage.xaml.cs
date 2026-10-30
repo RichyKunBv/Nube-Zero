@@ -25,6 +25,12 @@ public partial class MainPage : ContentPage
     private List<DiscoveryResponse> _discoveredServers = new List<DiscoveryResponse>();
     private bool _isNotesTabActive = false;
     private List<ArchivoDTO> _allFiles = new List<ArchivoDTO>();
+    private List<NotaDTO> _allNotes = new List<NotaDTO>();
+    private string _activeCategory = "Todos";
+    private int _currentSortIndex = 0; // 0: Nombre, 1: Recientes, 2: Tamaño
+    private bool _isGridView = false;
+    private CancellationTokenSource? _transferCts;
+    private long _transferStartTime;
 
     public MainPage()
     {
@@ -493,18 +499,9 @@ public partial class MainPage : ContentPage
 
             var json = await response.Content.ReadAsStringAsync();
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var notes = JsonSerializer.Deserialize<List<NotaDTO>>(json, options) ?? new List<NotaDTO>();
+            _allNotes = JsonSerializer.Deserialize<List<NotaDTO>>(json, options) ?? new List<NotaDTO>();
 
-            LstNotes.ItemsSource = notes;
-            TxtStatus.Text = $"Conectado ({notes.Count} notas)";
-
-            if (notes.Count > 0)
-            {
-                MainThread.BeginInvokeOnMainThread(() =>
-                {
-                    LstNotes.ScrollTo(notes.Count - 1, position: ScrollToPosition.End, animate: true);
-                });
-            }
+            ApplyNotesFilterMobile();
         }
         catch (Exception ex)
         {
@@ -514,6 +511,31 @@ public partial class MainPage : ContentPage
         {
             NotesRefreshView.IsRefreshing = false;
         }
+    }
+
+    private void ApplyNotesFilterMobile()
+    {
+        string query = TxtSearchNotesMobile?.Text?.Trim() ?? string.Empty;
+        var list = string.IsNullOrEmpty(query)
+            ? _allNotes
+            : _allNotes.Where(n => (n.Contenido?.Contains(query, StringComparison.CurrentCultureIgnoreCase) ?? false) ||
+                                  (n.CreadoPor?.Contains(query, StringComparison.CurrentCultureIgnoreCase) ?? false)).ToList();
+
+        LstNotes.ItemsSource = list;
+        TxtStatus.Text = $"Conectado ({list.Count} de {_allNotes.Count} notas)";
+
+        if (list.Count > 0)
+        {
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                LstNotes.ScrollTo(list.Count - 1, position: ScrollToPosition.End, animate: true);
+            });
+        }
+    }
+
+    private void TxtSearchNotesMobile_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        ApplyNotesFilterMobile();
     }
 
     private async void BtnSendNote_Clicked(object sender, EventArgs e)
@@ -647,21 +669,94 @@ public partial class MainPage : ContentPage
 
     private void ApplyFileFilter()
     {
-        string query = TxtSearchFilesMobile.Text?.Trim() ?? string.Empty;
-        if (string.IsNullOrEmpty(query))
+        string query = TxtSearchFilesMobile?.Text?.Trim() ?? string.Empty;
+        var filtered = _allFiles.AsEnumerable();
+
+        if (!string.IsNullOrEmpty(query))
         {
-            LstFiles.ItemsSource = _allFiles;
+            filtered = filtered.Where(f => f.Nombre.Contains(query, StringComparison.CurrentCultureIgnoreCase));
         }
-        else
+
+        if (!string.IsNullOrEmpty(_activeCategory) && _activeCategory != "Todos")
         {
-            var filtered = _allFiles.Where(f => f.Nombre.Contains(query, StringComparison.CurrentCultureIgnoreCase)).ToList();
-            LstFiles.ItemsSource = filtered;
+            filtered = filtered.Where(f => f.EsCarpeta || f.Categoria.Equals(_activeCategory, StringComparison.OrdinalIgnoreCase));
         }
+
+        // Ordenación seleccionada
+        if (_currentSortIndex == 1) // Recientes
+        {
+            filtered = filtered.OrderByDescending(f => f.EsCarpeta)
+                               .ThenByDescending(f => f.FechaModificacion);
+        }
+        else if (_currentSortIndex == 2) // Tamaño
+        {
+            filtered = filtered.OrderByDescending(f => f.EsCarpeta)
+                               .ThenByDescending(f => f.PesoBytes);
+        }
+        else // Nombre A-Z
+        {
+            filtered = filtered.OrderByDescending(f => f.EsCarpeta)
+                               .ThenBy(f => f.Nombre, StringComparer.CurrentCultureIgnoreCase);
+        }
+
+        var resultList = filtered.ToList();
+        LstFiles.ItemsSource = resultList;
+        LstFilesGrid.ItemsSource = resultList;
+        TxtStatus.Text = $"{resultList.Count} de {_allFiles.Count} elementos";
     }
 
     private void TxtSearchFilesMobile_TextChanged(object sender, TextChangedEventArgs e)
     {
         ApplyFileFilter();
+    }
+
+    private void BtnMobCategory_Clicked(object sender, EventArgs e)
+    {
+        if (sender is Button btn && btn.CommandParameter is string category)
+        {
+            _activeCategory = category;
+
+            var buttons = new[] { BtnCatMobAll, BtnCatMobImages, BtnCatMobVideos, BtnCatMobDocs, BtnCatMobApks, BtnCatMobZips };
+            foreach (var b in buttons)
+            {
+                if (b == null) continue;
+                bool isSelected = (b.CommandParameter as string) == _activeCategory;
+                b.BackgroundColor = isSelected ? Color.FromArgb("#00D2FF") : Color.FromArgb("#18FFFFFF");
+                b.TextColor = isSelected ? Colors.White : Color.FromArgb("#CCCCCC");
+                b.FontAttributes = isSelected ? FontAttributes.Bold : FontAttributes.None;
+            }
+
+            ApplyFileFilter();
+        }
+    }
+
+    private async void BtnSortMobile_Clicked(object sender, EventArgs e)
+    {
+        string sortChoice = await DisplayActionSheet("Ordenar Archivos", "Cancelar", null, "🔤 Nombre (A-Z)", "📅 Más recientes", "⚖️ Tamaño (Mayor a menor)");
+        if (sortChoice == "🔤 Nombre (A-Z)") _currentSortIndex = 0;
+        else if (sortChoice == "📅 Más recientes") _currentSortIndex = 1;
+        else if (sortChoice == "⚖️ Tamaño (Mayor a menor)") _currentSortIndex = 2;
+        else return;
+
+        ApplyFileFilter();
+    }
+
+    private void BtnToggleViewMobile_Clicked(object sender, EventArgs e)
+    {
+        _isGridView = !_isGridView;
+        LstFiles.IsVisible = !_isGridView;
+        LstFilesGrid.IsVisible = _isGridView;
+        BtnToggleViewMobile.Text = _isGridView ? "☰" : "⊞";
+    }
+
+    private async void LstFilesGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var selected = e.CurrentSelection.FirstOrDefault() as ArchivoDTO;
+        LstFilesGrid.SelectedItem = null;
+        if (selected != null && selected.EsCarpeta)
+        {
+            await OpenFolderAsync(selected.Nombre);
+        }
     }
 
     private async void LstFiles_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1046,6 +1141,7 @@ public partial class MainPage : ContentPage
     public async Task UploadFileAsync(string localPath, string fileName)
     {
         bool isCachedCopy = false;
+        _transferCts = new CancellationTokenSource();
         try
         {
             ShowTransfer($"Subiendo {fileName}...");
@@ -1082,12 +1178,16 @@ public partial class MainPage : ContentPage
                     request.Headers.TransferEncodingChunked = false;
                 }
 
-                using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+                using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, _transferCts.Token);
                 response.EnsureSuccessStatusCode();
             }
 
             TxtStatus.Text = "Subida exitosa";
             await LoadFilesAsync();
+        }
+        catch (OperationCanceledException)
+        {
+            TxtStatus.Text = "Subida cancelada";
         }
         catch (Exception ex)
         {
@@ -1095,6 +1195,8 @@ public partial class MainPage : ContentPage
         }
         finally
         {
+            _transferCts?.Dispose();
+            _transferCts = null;
             HideTransfer();
             if (isCachedCopy && File.Exists(localPath))
             {
@@ -1122,6 +1224,7 @@ public partial class MainPage : ContentPage
                 Android.Net.Uri? destination = null;
                 MainActivity? activity = null;
                 string? encryptedTemporaryPath = null;
+                _transferCts = new CancellationTokenSource();
                 try
                 {
                     string safeFileName = Path.GetFileName(dto.Nombre);
@@ -1139,24 +1242,24 @@ public partial class MainPage : ContentPage
 
                     ShowTransfer($"Descargando {safeFileName}...");
                     string relativePath = Uri.EscapeDataString(GetRemotePath(dto.Nombre));
-                    using var response = await _httpClient.GetAsync($"/api/download?path={relativePath}", HttpCompletionOption.ResponseHeadersRead);
+                    using var response = await _httpClient.GetAsync($"/api/download?path={relativePath}", HttpCompletionOption.ResponseHeadersRead, _transferCts.Token);
                     response.EnsureSuccessStatusCode();
 
                     encryptedTemporaryPath = Path.Combine(FileSystem.CacheDirectory, "download-" + Guid.NewGuid().ToString("N") + ".nze");
-                    using var stream = await response.Content.ReadAsStreamAsync();
+                    using var stream = await response.Content.ReadAsStreamAsync(_transferCts.Token);
                     long total = response.Content.Headers.ContentLength ?? -1;
                     long transferred = 0;
                     using (var encryptedOutput = new FileStream(encryptedTemporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true))
                     {
                         var buffer = new byte[81920];
                         int count;
-                        while ((count = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                        while ((count = await stream.ReadAsync(buffer, 0, buffer.Length, _transferCts.Token)) > 0)
                         {
-                            await encryptedOutput.WriteAsync(buffer, 0, count);
+                            await encryptedOutput.WriteAsync(buffer, 0, count, _transferCts.Token);
                             transferred += count;
                             UpdateTransferProgress(transferred, total);
                         }
-                        await encryptedOutput.FlushAsync();
+                        await encryptedOutput.FlushAsync(_transferCts.Token);
                     }
 
                     if (total >= 0 && transferred != total)
@@ -1165,6 +1268,10 @@ public partial class MainPage : ContentPage
                     using (var encryptedInput = new FileStream(encryptedTemporaryPath, FileMode.Open, FileAccess.Read, FileShare.Read))
                         await activity.CopyDecryptedToSaveDestinationAsync(destination, encryptedInput, _encryptionKey, total, UpdateTransferProgress);
                     TxtStatus.Text = "Archivo guardado correctamente";
+                }
+                catch (OperationCanceledException)
+                {
+                    TxtStatus.Text = "Descarga cancelada";
                 }
                 catch (Exception ex)
                 {
@@ -1333,7 +1440,9 @@ public partial class MainPage : ContentPage
     {
         Interlocked.Exchange(ref _lastProgressUpdate, 0);
         _transferMessage = message;
+        _transferStartTime = Environment.TickCount64;
         TxtTransferStatus.Text = message;
+        TxtTransferSpeed.Text = "Calculando...";
         PrgTransfer.Progress = 0;
         TransferPanel.IsVisible = true;
     }
@@ -1344,22 +1453,29 @@ public partial class MainPage : ContentPage
         if (total > transferred && now - Interlocked.Read(ref _lastProgressUpdate) < 150) return;
         Interlocked.Exchange(ref _lastProgressUpdate, now);
 
+        double elapsedSec = Math.Max(0.1, (now - _transferStartTime) / 1000.0);
+        double bytesPerSec = transferred / elapsedSec;
+        string speedText = bytesPerSec > 1048576 
+            ? $"{bytesPerSec / 1048576:0.#} MB/s" 
+            : $"{bytesPerSec / 1024:0.#} KB/s";
+
         MainThread.BeginInvokeOnMainThread(() =>
         {
+            TxtTransferSpeed.Text = speedText;
             if (total > 0)
             {
                 PrgTransfer.Progress = Math.Min(1, (double)transferred / total);
-                    if (transferred >= total)
-                    {
-                        string nextStep = _transferMessage.StartsWith("Subiendo", StringComparison.Ordinal)
-                            ? "esperando confirmación del servidor"
-                            : "verificando descarga";
-                        TxtTransferStatus.Text = $"{_transferMessage} • {nextStep}";
-                    }
-                    else
-                    {
-                        TxtTransferStatus.Text = $"{_transferMessage} • {transferred / 1048576d:0.#} / {total / 1048576d:0.#} MB";
-                    }
+                if (transferred >= total)
+                {
+                    string nextStep = _transferMessage.StartsWith("Subiendo", StringComparison.Ordinal)
+                        ? "esperando confirmación del servidor"
+                        : "verificando descarga";
+                    TxtTransferStatus.Text = $"{_transferMessage} • {nextStep}";
+                }
+                else
+                {
+                    TxtTransferStatus.Text = $"{_transferMessage} • {transferred / 1048576d:0.#} / {total / 1048576d:0.#} MB";
+                }
             }
         });
     }
@@ -1367,6 +1483,15 @@ public partial class MainPage : ContentPage
     private void HideTransfer()
     {
         MainThread.BeginInvokeOnMainThread(() => TransferPanel.IsVisible = false);
+    }
+
+    private void BtnCancelTransfer_Clicked(object sender, EventArgs e)
+    {
+        try
+        {
+            _transferCts?.Cancel();
+        }
+        catch { }
     }
 }
 

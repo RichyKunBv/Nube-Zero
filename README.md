@@ -14,6 +14,12 @@
 
 ## ✨ Características Principales
 
+- 🚀 **Experiencia y Usabilidad Mejorada en Escritorio y Móvil (v0.8.5)**:
+  - 🎨 **Chips de Filtrado por Categoría**: Filtro instantáneo de archivos por tipo (`✨ Todos`, `🖼️ Imágenes`, `🎬 Videos`, `📃 Documentos`, `📱 APKs`, `🗜️ Comprimidos`) en Desktop y Móvil.
+  - 🔀 **Ordenación Dinámica**: Ordena tus archivos y carpetas por **Nombre (A-Z)**, **Más recientes** o **Tamaño (Mayor a menor)** sin recargar la página.
+  - ⊞ **Vista de Cuadrícula / Grid y Lista**: Alterna con un solo clic/toque entre la vista clásica de lista y la vista de cuadrícula visual con miniaturas grandes.
+  - ⚡ **Indicador de Transferencia en Tiempo Real con Velocidad**: Muestra la velocidad real de transferencia en **KB/s o MB/s** y botón de **Cancelar transferencia** inmediata para subidas o descargas.
+  - 💬 **Buscador Integrado en Notas y Portapapeles**: Encuentra al instante notas o enlaces compartidos con filtrado en vivo tanto en PC como en Android.
 - 🚀 **Experiencia y Usabilidad Tipo Mega / MediaFire (v0.8.0)**:
   - 🔤 **Orden Alfabético Inteligente**: Listado organizado de forma clara y predecible; carpetas ordenadas de la A a la Z primero, seguidas por los archivos de la A a la Z en todos los clientes y servidor.
   - 🔍 **Buscador y Filtro en Tiempo Real**: Barra de búsqueda rápida integrada en la vista de archivos tanto en PC como en móvil para encontrar al instante cualquier elemento.

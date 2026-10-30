@@ -47,6 +47,22 @@ namespace NubeZero.Shared
             }
         }
 
+        [JsonIgnore]
+        public string Categoria
+        {
+            get
+            {
+                if (EsCarpeta) return "Carpetas";
+                string extension = Path.GetExtension(Nombre ?? string.Empty).ToLowerInvariant();
+                if (new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg" }.Contains(extension)) return "Imágenes";
+                if (new[] { ".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".3gp", ".wmv", ".mpeg", ".mpg" }.Contains(extension)) return "Videos";
+                if (extension == ".apk") return "APKs";
+                if (new[] { ".pdf", ".doc", ".docx", ".txt", ".odt", ".xls", ".xlsx", ".ppt", ".pptx", ".csv", ".json", ".md" }.Contains(extension)) return "Documentos";
+                if (new[] { ".zip", ".rar", ".7z", ".tar", ".gz" }.Contains(extension)) return "Comprimidos";
+                return "Otros";
+            }
+        }
+
         public event PropertyChangedEventHandler PropertyChanged = delegate { };
     }
 }

@@ -43,66 +43,122 @@
             </Frame>
 
             <!-- ZONA ARCHIVOS -->
-            <Grid x:Name="FilesContainer" Grid.Row="2" RowDefinitions="Auto, Auto, *" IsVisible="True">
-                <!-- BARRA DE RUTA Y BOTÓN NUEVA CARPETA -->
-                <Grid Grid.Row="0" Margin="15,0,15,6" ColumnDefinitions="Auto, *, Auto">
+            <Grid x:Name="FilesContainer" Grid.Row="2" RowDefinitions="Auto, Auto, Auto, *" IsVisible="True">
+                <!-- BARRA DE RUTA Y BOTONES DE ACCIÓN RÁPIDA -->
+                <Grid Grid.Row="0" Margin="15,0,15,6" ColumnDefinitions="Auto, *, Auto, Auto, Auto">
                     <Button x:Name="BtnParentFolder" Grid.Column="0" Text="↑" Clicked="BtnParentFolder_Clicked" IsVisible="False" BackgroundColor="#30FFFFFF" TextColor="White" WidthRequest="36" HeightRequest="34" CornerRadius="6" Padding="0"/>
-                    <Label x:Name="TxtCurrentPath" Grid.Column="1" Text="/" TextColor="#00D2FF" VerticalTextAlignment="Center" Margin="8,0" FontAttributes="Bold" FontSize="13"/>
-                    <Button x:Name="BtnNewFolderMobile" Grid.Column="2" Text="📁+ Carpeta" Clicked="BtnNewFolderMobile_Clicked" BackgroundColor="#25FFFFFF" TextColor="White" FontAttributes="Bold" CornerRadius="8" HeightRequest="34" Padding="10,0" FontSize="12"/>
+                    <Label x:Name="TxtCurrentPath" Grid.Column="1" Text="/" TextColor="#00D2FF" VerticalTextAlignment="Center" Margin="8,0" FontAttributes="Bold" FontSize="13" LineBreakMode="TailTruncation"/>
+                    
+                    <!-- Botón para alternar Lista / Cuadrícula -->
+                    <Button Grid.Column="2" x:Name="BtnToggleViewMobile" Text="⊞" Clicked="BtnToggleViewMobile_Clicked" BackgroundColor="#25FFFFFF" TextColor="White" WidthRequest="36" HeightRequest="34" CornerRadius="6" Margin="0,0,4,0" Padding="0" FontSize="16"/>
+                    <!-- Selector de Ordenación -->
+                    <Button Grid.Column="3" x:Name="BtnSortMobile" Text="🔀" Clicked="BtnSortMobile_Clicked" BackgroundColor="#25FFFFFF" TextColor="White" WidthRequest="36" HeightRequest="34" CornerRadius="6" Margin="0,0,4,0" Padding="0" FontSize="14"/>
+                    <!-- Nueva Carpeta -->
+                    <Button x:Name="BtnNewFolderMobile" Grid.Column="4" Text="📁+" Clicked="BtnNewFolderMobile_Clicked" BackgroundColor="#25FFFFFF" TextColor="White" FontAttributes="Bold" CornerRadius="6" WidthRequest="36" HeightRequest="34" Padding="0" FontSize="13"/>
                 </Grid>
 
                 <!-- BUSCADOR RÁPIDO DE ARCHIVOS -->
-                <Border Grid.Row="1" Margin="15,0,15,8" Padding="10,2" Stroke="#20FFFFFF" StrokeThickness="1" BackgroundColor="#15FFFFFF" StrokeShape="RoundRectangle 8">
+                <Border Grid.Row="1" Margin="15,0,15,6" Padding="10,2" Stroke="#20FFFFFF" StrokeThickness="1" BackgroundColor="#15FFFFFF" StrokeShape="RoundRectangle 8">
                     <Grid ColumnDefinitions="Auto, *, Auto">
                         <Label Grid.Column="0" Text="🔍" VerticalOptions="Center" TextColor="#80FFFFFF" Margin="0,0,6,0"/>
                         <Entry Grid.Column="1" x:Name="TxtSearchFilesMobile" Placeholder="Buscar archivo o carpeta..." TextColor="White" PlaceholderColor="#70FFFFFF" BackgroundColor="Transparent" FontSize="13" TextChanged="TxtSearchFilesMobile_TextChanged" ClearButtonVisibility="WhileEditing"/>
                     </Grid>
                 </Border>
 
-                <!-- LISTA DE ARCHIVOS -->
-                <RefreshView Grid.Row="2" x:Name="RefreshView" Refreshing="RefreshView_Refreshing">
-                    <CollectionView x:Name="LstFiles" Margin="15,0" SelectionMode="Single" SelectionChanged="LstFiles_SelectionChanged">
-                        <CollectionView.ItemTemplate>
-                            <DataTemplate x:DataType="shared:ArchivoDTO">
-                                <Frame Margin="0,5" Padding="10" BackgroundColor="#10FFFFFF" BorderColor="#20FFFFFF" CornerRadius="10" Loaded="FileItem_Loaded" BindingContextChanged="FileItem_Loaded">
-                                    <Frame.GestureRecognizers>
-                                        <TapGestureRecognizer Tapped="OnFileItemTapped" CommandParameter="{Binding .}"/>
-                                    </Frame.GestureRecognizers>
-                                    <Grid ColumnDefinitions="Auto, *, Auto">
-                                        <Grid Grid.Column="0" WidthRequest="48" HeightRequest="48" Margin="0,0,12,0">
-                                            <Image Source="{Binding ThumbnailSource}" Aspect="AspectFill"/>
-                                            <Label Text="{Binding Icono}" FontSize="24" HorizontalOptions="Center" VerticalOptions="Center"/>
+                <!-- CHIPS DE FILTRADO POR CATEGORÍA EN MÓVIL -->
+                <ScrollView Grid.Row="2" Orientation="Horizontal" HorizontalScrollBarVisibility="Never" Margin="15,0,15,8">
+                    <HorizontalStackLayout Spacing="6">
+                        <Button x:Name="BtnCatMobAll" Text="✨ Todos" Clicked="BtnMobCategory_Clicked" CommandParameter="Todos" BackgroundColor="#00D2FF" TextColor="White" FontAttributes="Bold" CornerRadius="12" HeightRequest="30" Padding="10,0" FontSize="11"/>
+                        <Button x:Name="BtnCatMobImages" Text="🖼️ Imágenes" Clicked="BtnMobCategory_Clicked" CommandParameter="Imágenes" BackgroundColor="#18FFFFFF" TextColor="#CCCCCC" CornerRadius="12" HeightRequest="30" Padding="10,0" FontSize="11"/>
+                        <Button x:Name="BtnCatMobVideos" Text="🎬 Videos" Clicked="BtnMobCategory_Clicked" CommandParameter="Videos" BackgroundColor="#18FFFFFF" TextColor="#CCCCCC" CornerRadius="12" HeightRequest="30" Padding="10,0" FontSize="11"/>
+                        <Button x:Name="BtnCatMobDocs" Text="📃 Docs" Clicked="BtnMobCategory_Clicked" CommandParameter="Documentos" BackgroundColor="#18FFFFFF" TextColor="#CCCCCC" CornerRadius="12" HeightRequest="30" Padding="10,0" FontSize="11"/>
+                        <Button x:Name="BtnCatMobApks" Text="📱 APKs" Clicked="BtnMobCategory_Clicked" CommandParameter="APKs" BackgroundColor="#18FFFFFF" TextColor="#CCCCCC" CornerRadius="12" HeightRequest="30" Padding="10,0" FontSize="11"/>
+                        <Button x:Name="BtnCatMobZips" Text="🗜️ Zips" Clicked="BtnMobCategory_Clicked" CommandParameter="Comprimidos" BackgroundColor="#18FFFFFF" TextColor="#CCCCCC" CornerRadius="12" HeightRequest="30" Padding="10,0" FontSize="11"/>
+                    </HorizontalStackLayout>
+                </ScrollView>
+
+                <!-- VISTA DE ARCHIVOS (LISTA / CUADRÍCULA) -->
+                <RefreshView Grid.Row="3" x:Name="RefreshView" Refreshing="RefreshView_Refreshing">
+                    <Grid>
+                        <!-- MODO LISTA -->
+                        <CollectionView x:Name="LstFiles" Margin="15,0" SelectionMode="Single" SelectionChanged="LstFiles_SelectionChanged" IsVisible="True">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate x:DataType="shared:ArchivoDTO">
+                                    <Frame Margin="0,5" Padding="10" BackgroundColor="#10FFFFFF" BorderColor="#20FFFFFF" CornerRadius="10" Loaded="FileItem_Loaded" BindingContextChanged="FileItem_Loaded">
+                                        <Frame.GestureRecognizers>
+                                            <TapGestureRecognizer Tapped="OnFileItemTapped" CommandParameter="{Binding .}"/>
+                                        </Frame.GestureRecognizers>
+                                        <Grid ColumnDefinitions="Auto, *, Auto">
+                                            <Grid Grid.Column="0" WidthRequest="48" HeightRequest="48" Margin="0,0,12,0">
+                                                <Image Source="{Binding ThumbnailSource}" Aspect="AspectFill"/>
+                                                <Label Text="{Binding Icono}" FontSize="24" HorizontalOptions="Center" VerticalOptions="Center"/>
+                                            </Grid>
+                                            
+                                            <VerticalStackLayout Grid.Column="1" VerticalOptions="Center">
+                                                <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="15" TextColor="White" LineBreakMode="TailTruncation"/>
+                                                <HorizontalStackLayout Spacing="5" Margin="0,2,0,0">
+                                                    <Label Text="{Binding PesoBytes, Converter={StaticResource BytesToSizeConverter}}" FontSize="11" TextColor="#A0A0A0"/>
+                                                    <Label Text="•" TextColor="#606060"/>
+                                                    <Label Text="{Binding ModificadoPor, StringFormat='Por {0}'}" FontSize="11" TextColor="#00D2FF"/>
+                                                </HorizontalStackLayout>
+                                            </VerticalStackLayout>
+                                            
+                                            <!-- Menú contextual (3 puntos) -->
+                                            <Button Grid.Column="2" Text="⋮" FontSize="22" BackgroundColor="Transparent" TextColor="White" WidthRequest="38" HeightRequest="38" VerticalOptions="Center" Clicked="BtnItemMenu_Clicked" CommandParameter="{Binding .}" />
                                         </Grid>
-                                        
-                                        <VerticalStackLayout Grid.Column="1" VerticalOptions="Center">
-                                            <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="16" TextColor="White"/>
-                                            <HorizontalStackLayout Spacing="5" Margin="0,2,0,0">
-                                                <Label Text="{Binding PesoBytes, Converter={StaticResource BytesToSizeConverter}}" FontSize="12" TextColor="#A0A0A0"/>
-                                                <Label Text="•" TextColor="#606060"/>
-                                                <Label Text="{Binding ModificadoPor, StringFormat='Por {0}'}" FontSize="12" TextColor="#00D2FF"/>
-                                            </HorizontalStackLayout>
+                                    </Frame>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+
+                        <!-- MODO CUADRÍCULA -->
+                        <CollectionView x:Name="LstFilesGrid" Margin="10,0" SelectionMode="Single" SelectionChanged="LstFilesGrid_SelectionChanged" IsVisible="False">
+                            <CollectionView.ItemsLayout>
+                                <GridItemsLayout Orientation="Vertical" Span="2" HorizontalItemSpacing="8" VerticalItemSpacing="8"/>
+                            </CollectionView.ItemsLayout>
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate x:DataType="shared:ArchivoDTO">
+                                    <Frame Margin="4" Padding="8" BackgroundColor="#14FFFFFF" BorderColor="#25FFFFFF" CornerRadius="12" Loaded="FileItem_Loaded" BindingContextChanged="FileItem_Loaded">
+                                        <Frame.GestureRecognizers>
+                                            <TapGestureRecognizer Tapped="OnFileItemTapped" CommandParameter="{Binding .}"/>
+                                        </Frame.GestureRecognizers>
+                                        <VerticalStackLayout Spacing="4">
+                                            <Grid HeightRequest="90" BackgroundColor="#10FFFFFF">
+                                                <Image Source="{Binding ThumbnailSource}" Aspect="AspectFill"/>
+                                                <Label Text="{Binding Icono}" FontSize="36" HorizontalOptions="Center" VerticalOptions="Center"/>
+                                            </Grid>
+                                            <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="13" TextColor="White" LineBreakMode="TailTruncation" MaxLines="1"/>
+                                            <Grid ColumnDefinitions="*, Auto">
+                                                <Label Grid.Column="0" Text="{Binding PesoBytes, Converter={StaticResource BytesToSizeConverter}}" FontSize="10" TextColor="#A0A0A0" VerticalOptions="Center"/>
+                                                <Button Grid.Column="1" Text="⋮" FontSize="18" BackgroundColor="Transparent" TextColor="White" WidthRequest="30" HeightRequest="30" Padding="0" Clicked="BtnItemMenu_Clicked" CommandParameter="{Binding .}"/>
+                                            </Grid>
                                         </VerticalStackLayout>
-                                        
-                                        <!-- Menú contextual (3 puntos) -->
-                                        <Button Grid.Column="2" Text="⋮" FontSize="24" BackgroundColor="Transparent" TextColor="White" WidthRequest="40" HeightRequest="40" VerticalOptions="Center" Clicked="BtnItemMenu_Clicked" CommandParameter="{Binding .}" />
-                                    </Grid>
-                                </Frame>
-                            </DataTemplate>
-                        </CollectionView.ItemTemplate>
-                    </CollectionView>
+                                    </Frame>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </Grid>
                 </RefreshView>
 
                 <!-- FAB (Botón flotante) -->
-                <Button x:Name="BtnUploadFab" Grid.Row="2" Text="+" BackgroundColor="#00D2FF" TextColor="White" FontSize="28" FontAttributes="Bold"
+                <Button x:Name="BtnUploadFab" Grid.Row="3" Text="+" BackgroundColor="#00D2FF" TextColor="White" FontSize="28" FontAttributes="Bold"
                         WidthRequest="60" HeightRequest="60" CornerRadius="30"
                         HorizontalOptions="End" VerticalOptions="End" Margin="20,20,20,30"
                         Shadow="{Shadow Brush=Black, Offset='0,4', Radius=10, Opacity=0.4}"
                         Clicked="BtnUpload_Clicked"/>
             </Grid>
 
-            <!-- ZONA NOTAS (FEED TIPO CHAT) -->
-            <Grid x:Name="NotesContainer" Grid.Row="2" RowDefinitions="*, Auto" IsVisible="False">
-                <RefreshView x:Name="NotesRefreshView" Refreshing="NotesRefreshView_Refreshing">
+            <!-- ZONA NOTAS (FEED TIPO CHAT CON BÚSQUEDA) -->
+            <Grid x:Name="NotesContainer" Grid.Row="2" RowDefinitions="Auto, *, Auto" IsVisible="False">
+                <!-- BUSCADOR DE NOTAS EN MÓVIL -->
+                <Border Grid.Row="0" Margin="15,0,15,6" Padding="10,2" Stroke="#20FFFFFF" StrokeThickness="1" BackgroundColor="#15FFFFFF" StrokeShape="RoundRectangle 8">
+                    <Grid ColumnDefinitions="Auto, *">
+                        <Label Grid.Column="0" Text="🔍" VerticalOptions="Center" TextColor="#80FFFFFF" Margin="0,0,6,0"/>
+                        <Entry Grid.Column="1" x:Name="TxtSearchNotesMobile" Placeholder="Buscar notas o enlaces..." TextColor="White" PlaceholderColor="#70FFFFFF" BackgroundColor="Transparent" FontSize="13" TextChanged="TxtSearchNotesMobile_TextChanged" ClearButtonVisibility="WhileEditing"/>
+                    </Grid>
+                </Border>
+
+                <RefreshView Grid.Row="1" x:Name="NotesRefreshView" Refreshing="NotesRefreshView_Refreshing">
                     <CollectionView x:Name="LstNotes" Margin="15,0">
                         <CollectionView.ItemTemplate>
                             <DataTemplate x:DataType="shared:NotaDTO">
@@ -128,7 +184,7 @@
                 </RefreshView>
 
                 <!-- BARRA INFERIOR DE ENTRADA -->
-                <Border Grid.Row="1" Margin="15,4,15,10" Padding="8,4" Stroke="#25FFFFFF" StrokeThickness="1" BackgroundColor="#20FFFFFF" StrokeShape="RoundRectangle 12">
+                <Border Grid.Row="2" Margin="15,4,15,10" Padding="8,4" Stroke="#25FFFFFF" StrokeThickness="1" BackgroundColor="#20FFFFFF" StrokeShape="RoundRectangle 12">
                     <Grid ColumnDefinitions="*, Auto">
                         <Editor x:Name="TxtNoteInput" Placeholder="Escribe una nota o enlace..." AutoSize="TextChanges" MaximumHeightRequest="100" TextColor="White" PlaceholderColor="#80FFFFFF" BackgroundColor="Transparent" Margin="4,0"/>
                         <Button Grid.Column="1" x:Name="BtnSendNote" Text="Enviar" Clicked="BtnSendNote_Clicked" BackgroundColor="#00D2FF" TextColor="White" FontAttributes="Bold" CornerRadius="8" HeightRequest="38" Padding="12,0" VerticalOptions="End" Margin="4,0,0,0"/>
@@ -136,11 +192,18 @@
                 </Border>
             </Grid>
 
-            <Border x:Name="TransferPanel" Grid.Row="3" Margin="15,0,15,12" Padding="10,6" Stroke="#20FFFFFF" StrokeThickness="1" BackgroundColor="#18FFFFFF" IsVisible="False">
-                <VerticalStackLayout Spacing="4">
-                    <Label x:Name="TxtTransferStatus" TextColor="White" FontSize="12"/>
-                    <ProgressBar x:Name="PrgTransfer" Progress="0" HeightRequest="6"/>
-                </VerticalStackLayout>
+            <!-- PANEL DE TRANSFERENCIA MEJORADO EN MÓVIL CON VELOCIDAD Y CANCELACIÓN -->
+            <Border x:Name="TransferPanel" Grid.Row="3" Margin="15,0,15,12" Padding="12,8" Stroke="#4000D2FF" StrokeThickness="1" BackgroundColor="#222238" StrokeShape="RoundRectangle 10" IsVisible="False">
+                <Grid ColumnDefinitions="*, Auto">
+                    <VerticalStackLayout Grid.Column="0" Spacing="4">
+                        <Grid ColumnDefinitions="*, Auto">
+                            <Label x:Name="TxtTransferStatus" TextColor="White" FontSize="12" FontAttributes="Bold" LineBreakMode="TailTruncation"/>
+                            <Label Grid.Column="1" x:Name="TxtTransferSpeed" Text="0 KB/s" TextColor="#00D2FF" FontSize="11" FontAttributes="Bold" Margin="8,0,0,0"/>
+                        </Grid>
+                        <ProgressBar x:Name="PrgTransfer" Progress="0" HeightRequest="6" ProgressColor="#00D2FF"/>
+                    </VerticalStackLayout>
+                    <Button Grid.Column="1" Text="✕" Clicked="BtnCancelTransfer_Clicked" BackgroundColor="#30FF5555" TextColor="#FF7777" FontAttributes="Bold" CornerRadius="6" WidthRequest="32" HeightRequest="32" Margin="8,0,0,0" Padding="0"/>
+                </Grid>
             </Border>
         </Grid>
 

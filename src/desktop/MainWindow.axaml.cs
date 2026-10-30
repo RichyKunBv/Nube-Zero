@@ -44,8 +44,14 @@ public partial class MainWindow : Window
     private bool _hasSavedMacCredentials;
     private bool _isNotesTabActive = false;
     private List<ArchivoDTO> _allFiles = new List<ArchivoDTO>();
+    private List<NotaDTO> _allNotes = new List<NotaDTO>();
     private ArchivoDTO? _itemToRename;
     private ArchivoDTO? _itemToMove;
+    private string _activeCategory = "Todos";
+    private int _currentSortIndex = 0; // 0: Nombre, 1: Recientes, 2: Tamaño
+    private bool _isGridView = false;
+    private CancellationTokenSource? _transferCts;
+    private long _transferStartTime;
 
     public MainWindow()
     {
@@ -441,11 +447,8 @@ public partial class MainWindow : Window
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
-                var notes = JsonSerializer.Deserialize<List<NotaDTO>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new List<NotaDTO>();
-                
-                LstNotes.ItemsSource = notes;
-                TxtNoNotes.IsVisible = (notes.Count == 0);
-                TxtStatus.Text = $"Conectado ({notes.Count} notas)";
+                _allNotes = JsonSerializer.Deserialize<List<NotaDTO>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new List<NotaDTO>();
+                ApplyNotesFilter();
 
                 Dispatcher.UIThread.Post(() =>
                 {
@@ -461,6 +464,33 @@ public partial class MainWindow : Window
         {
             TxtStatus.Text = $"Error: {ex.Message}";
         }
+    }
+
+    private void ApplyNotesFilter()
+    {
+        string query = TxtSearchNotes.Text?.Trim() ?? string.Empty;
+        BtnClearSearchNotes.IsVisible = !string.IsNullOrEmpty(query);
+
+        var list = string.IsNullOrEmpty(query)
+            ? _allNotes
+            : _allNotes.Where(n => (n.Contenido?.Contains(query, StringComparison.CurrentCultureIgnoreCase) ?? false) ||
+                                  (n.CreadoPor?.Contains(query, StringComparison.CurrentCultureIgnoreCase) ?? false)).ToList();
+
+        LstNotes.ItemsSource = list;
+        TxtNoNotes.IsVisible = (list.Count == 0);
+        TxtNotesCount.Text = $"{list.Count} de {_allNotes.Count} notas";
+        TxtStatus.Text = $"Conectado ({_allNotes.Count} notas)";
+    }
+
+    private void TxtSearchNotes_TextChanged(object? sender, TextChangedEventArgs e)
+    {
+        ApplyNotesFilter();
+    }
+
+    private void BtnClearSearchNotes_Click(object? sender, RoutedEventArgs e)
+    {
+        TxtSearchNotes.Text = string.Empty;
+        ApplyNotesFilter();
     }
 
     private async void BtnSendNote_Click(object? sender, RoutedEventArgs e)
@@ -601,15 +631,40 @@ public partial class MainWindow : Window
         string query = TxtSearchFiles.Text?.Trim() ?? string.Empty;
         BtnClearSearch.IsVisible = !string.IsNullOrEmpty(query);
 
-        if (string.IsNullOrEmpty(query))
+        var filtered = _allFiles.AsEnumerable();
+
+        if (!string.IsNullOrEmpty(query))
         {
-            LstFiles.ItemsSource = _allFiles;
+            filtered = filtered.Where(f => f.Nombre.Contains(query, StringComparison.CurrentCultureIgnoreCase));
         }
-        else
+
+        if (!string.IsNullOrEmpty(_activeCategory) && _activeCategory != "Todos")
         {
-            var filtered = _allFiles.Where(f => f.Nombre.Contains(query, StringComparison.CurrentCultureIgnoreCase)).ToList();
-            LstFiles.ItemsSource = filtered;
+            filtered = filtered.Where(f => f.EsCarpeta || f.Categoria.Equals(_activeCategory, StringComparison.OrdinalIgnoreCase));
         }
+
+        // Aplicar ordenación seleccionada
+        if (_currentSortIndex == 1) // Recientes
+        {
+            filtered = filtered.OrderByDescending(f => f.EsCarpeta)
+                               .ThenByDescending(f => f.FechaModificacion);
+        }
+        else if (_currentSortIndex == 2) // Tamaño
+        {
+            filtered = filtered.OrderByDescending(f => f.EsCarpeta)
+                               .ThenByDescending(f => f.PesoBytes);
+        }
+        else // Nombre A-Z
+        {
+            filtered = filtered.OrderByDescending(f => f.EsCarpeta)
+                               .ThenBy(f => f.Nombre, StringComparer.CurrentCultureIgnoreCase);
+        }
+
+        var resultList = filtered.ToList();
+        LstFiles.ItemsSource = resultList;
+        LstFilesGrid.ItemsSource = resultList;
+        TxtDragHint.IsVisible = (resultList.Count == 0);
+        TxtStatus.Text = $"{resultList.Count} de {_allFiles.Count} elementos";
     }
 
     private void TxtSearchFiles_TextChanged(object? sender, TextChangedEventArgs e)
@@ -623,9 +678,57 @@ public partial class MainWindow : Window
         ApplyFileFilter();
     }
 
+    private void CmbSortFiles_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (CmbSortFiles != null)
+        {
+            _currentSortIndex = CmbSortFiles.SelectedIndex;
+            ApplyFileFilter();
+        }
+    }
+
+    private void BtnFilterCategory_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is string category)
+        {
+            _activeCategory = category;
+
+            // Actualizar estilo visual de los chips
+            var buttons = new[] { BtnCatAll, BtnCatImages, BtnCatVideos, BtnCatDocs, BtnCatApks, BtnCatZips };
+            foreach (var b in buttons)
+            {
+                if (b == null) continue;
+                bool isSelected = (b.Tag as string) == _activeCategory;
+                b.Background = isSelected ? new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#00D2FF")) : new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#18FFFFFF"));
+                b.Foreground = isSelected ? Avalonia.Media.Brushes.White : new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#CCCCCC"));
+                b.FontWeight = isSelected ? Avalonia.Media.FontWeight.Bold : Avalonia.Media.FontWeight.Normal;
+            }
+
+            ApplyFileFilter();
+        }
+    }
+
+    private void BtnToggleViewMode_Click(object? sender, RoutedEventArgs e)
+    {
+        _isGridView = !_isGridView;
+        LstFiles.IsVisible = !_isGridView;
+        LstFilesGrid.IsVisible = _isGridView;
+        BtnToggleViewMode.Content = _isGridView ? "☰ Lista" : "⊞ Cuadrícula";
+    }
+
     private async void LstFiles_DoubleTapped(object? sender, TappedEventArgs e)
     {
         if (LstFiles.SelectedItem is ArchivoDTO { EsCarpeta: true } folder)
+        {
+            TxtSearchFiles.Text = string.Empty;
+            _currentPath = string.IsNullOrEmpty(_currentPath) ? folder.Nombre : $"{_currentPath}/{folder.Nombre}";
+            await LoadFilesAsync();
+        }
+    }
+
+    private async void LstFilesGrid_DoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (LstFilesGrid.SelectedItem is ArchivoDTO { EsCarpeta: true } folder)
         {
             TxtSearchFiles.Text = string.Empty;
             _currentPath = string.IsNullOrEmpty(_currentPath) ? folder.Nombre : $"{_currentPath}/{folder.Nombre}";
@@ -835,6 +938,7 @@ public partial class MainWindow : Window
 
     private async System.Threading.Tasks.Task UploadFileAsync(string localPath)
     {
+        _transferCts = new CancellationTokenSource();
         try
         {
             string fileName = Path.GetFileName(localPath);
@@ -857,9 +961,13 @@ public partial class MainWindow : Window
                 request.Headers.TransferEncodingChunked = false;
             }
 
-            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, _transferCts.Token);
             response.EnsureSuccessStatusCode();
             TxtStatus.Text = "Subida exitosa";
+        }
+        catch (OperationCanceledException)
+        {
+            TxtStatus.Text = "Subida cancelada";
         }
         catch (Exception ex)
         {
@@ -867,6 +975,8 @@ public partial class MainWindow : Window
         }
         finally
         {
+            _transferCts?.Dispose();
+            _transferCts = null;
             HideTransfer();
         }
     }
@@ -892,28 +1002,29 @@ public partial class MainWindow : Window
                 string destPath = Path.Combine(folder[0].TryGetLocalPath()!, dto.Nombre);
                 string temporaryPath = destPath + ".nubezero-" + Guid.NewGuid().ToString("N") + ".part";
                 string encryptedTemporaryPath = temporaryPath + ".encrypted";
+                _transferCts = new CancellationTokenSource();
                 ShowTransfer($"Descargando {dto.Nombre}...");
                 
                 try
                 {
                     string relativePath = Uri.EscapeDataString(GetRemotePath(dto.Nombre));
-                    using var response = await _httpClient.GetAsync($"/api/download?path={relativePath}", HttpCompletionOption.ResponseHeadersRead);
+                    using var response = await _httpClient.GetAsync($"/api/download?path={relativePath}", HttpCompletionOption.ResponseHeadersRead, _transferCts.Token);
                     response.EnsureSuccessStatusCode();
                     
                     long total = response.Content.Headers.ContentLength ?? -1;
                     long transferred = 0;
-                    using var input = await response.Content.ReadAsStreamAsync();
+                    using var input = await response.Content.ReadAsStreamAsync(_transferCts.Token);
                     using (var fs = new FileStream(encryptedTemporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true))
                     {
                         var buffer = new byte[81920];
                         int count;
-                        while ((count = await input.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                        while ((count = await input.ReadAsync(buffer, 0, buffer.Length, _transferCts.Token)) > 0)
                         {
-                            await fs.WriteAsync(buffer, 0, count);
+                            await fs.WriteAsync(buffer, 0, count, _transferCts.Token);
                             transferred += count;
                             UpdateTransferProgress(transferred, total);
                         }
-                        await fs.FlushAsync();
+                        await fs.FlushAsync(_transferCts.Token);
                     }
 
                     if (total >= 0 && transferred != total)
@@ -928,12 +1039,18 @@ public partial class MainWindow : Window
                     File.Move(temporaryPath, destPath, true);
                     TxtStatus.Text = "Descarga completada";
                 }
+                catch (OperationCanceledException)
+                {
+                    TxtStatus.Text = "Descarga cancelada";
+                }
                 catch (Exception ex)
                 {
                     TxtStatus.Text = $"Error descarga: {ex.Message}";
                 }
                 finally
                 {
+                    _transferCts?.Dispose();
+                    _transferCts = null;
                     if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
                     if (File.Exists(encryptedTemporaryPath)) File.Delete(encryptedTemporaryPath);
                     HideTransfer();
@@ -1205,7 +1322,9 @@ public partial class MainWindow : Window
     {
         Interlocked.Exchange(ref _lastProgressUpdate, 0);
         _transferMessage = message;
+        _transferStartTime = Environment.TickCount64;
         TxtTransferStatus.Text = _transferMessage;
+        TxtTransferSpeed.Text = "Calculando...";
         PrgTransfer.Value = 0;
         TransferPanel.IsVisible = true;
     }
@@ -1216,8 +1335,16 @@ public partial class MainWindow : Window
         if (total > transferred && now - Interlocked.Read(ref _lastProgressUpdate) < 150) return;
         Interlocked.Exchange(ref _lastProgressUpdate, now);
 
+        // Calcular velocidad
+        double elapsedSec = Math.Max(0.1, (now - _transferStartTime) / 1000.0);
+        double bytesPerSec = transferred / elapsedSec;
+        string speedText = bytesPerSec > 1048576 
+            ? $"{bytesPerSec / 1048576:0.#} MB/s" 
+            : $"{bytesPerSec / 1024:0.#} KB/s";
+
         Dispatcher.UIThread.Post(() =>
         {
+            TxtTransferSpeed.Text = speedText;
             if (total > 0)
             {
                 PrgTransfer.Value = Math.Min(100, transferred * 100d / total);
@@ -1239,6 +1366,15 @@ public partial class MainWindow : Window
     private void HideTransfer()
     {
         Dispatcher.UIThread.Post(() => TransferPanel.IsVisible = false);
+    }
+
+    private void BtnCancelTransfer_Click(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _transferCts?.Cancel();
+        }
+        catch { }
     }
 
     private void BtnLogout_Click(object? sender, RoutedEventArgs e)

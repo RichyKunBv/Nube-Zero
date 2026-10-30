@@ -78,8 +78,8 @@ actualizar_macOS() {
     VERSION=$(get_version "$PROJECT_DIR/src/shared/Version.cs")
 
     if [ -z "$VERSION" ]; then
-        echo "Error: No se pudo encontrar la etiqueta <Version> en el .csproj"
-        return
+        echo "Error: No se pudo encontrar la versión en Version.cs"
+        return 1
     fi
 
     echo "Versión detectada: $VERSION"
@@ -141,18 +141,26 @@ actualizar_windows() {
     VERSION=$(get_version "$PROJECT_DIR/src/shared/Version.cs")
 
     if [ -z "$VERSION" ]; then
-        echo "Error: No se pudo encontrar la etiqueta <Version> en el .csproj"
-        return
+        echo "Error: No se pudo encontrar la versión en Version.cs"
+        return 1
     fi
 
     echo "Versión detectada: $VERSION"
     echo "Publicando binarios..."
 
+    carpeta_windows || return 1
+
     cd "$PROJECT_DIR/src/desktop"
-# Compilar para Windows ARM64
-    dotnet publish -c Release -r win-arm64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None
+    # Compilar para Windows ARM64
+    if ! dotnet publish NubeZero.Desktop.csproj -c Release -r win-arm64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None; then
+        echo "Error: Falló la publicación para Windows ARM64."
+        return 1
+    fi
     # Compilar para Windows x64
-    dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None
+    if ! dotnet publish NubeZero.Desktop.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None; then
+        echo "Error: Falló la publicación para Windows x64."
+        return 1
+    fi
 
     echo "Copiando ejecutables..."
 
@@ -186,18 +194,26 @@ actualizar_linux() {
     VERSION=$(get_version "$PROJECT_DIR/src/shared/Version.cs")
 
     if [ -z "$VERSION" ]; then
-        echo "Error: No se pudo encontrar la etiqueta <Version> en el .csproj"
-        return
+        echo "Error: No se pudo encontrar la versión en Version.cs"
+        return 1
     fi
 
     echo "Versión detectada: $VERSION"
     echo "Publicando binarios..."
 
+    carpeta_linux || return 1
+
     cd "$PROJECT_DIR/src/desktop"
-# Compilar para Linux ARM64
-    dotnet publish -c Release -r linux-arm64 --self-contained -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:PublishSingleFile=true    
-# Compilar para Linux x64
-    dotnet publish -c Release -r linux-x64 --self-contained -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:PublishSingleFile=true
+    # Compilar para Linux ARM64
+    if ! dotnet publish NubeZero.Desktop.csproj -c Release -r linux-arm64 --self-contained -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:PublishSingleFile=true; then
+        echo "Error: Falló la publicación para Linux ARM64."
+        return 1
+    fi
+    # Compilar para Linux x64
+    if ! dotnet publish NubeZero.Desktop.csproj -c Release -r linux-x64 --self-contained -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:PublishSingleFile=true; then
+        echo "Error: Falló la publicación para Linux x64."
+        return 1
+    fi
 
     echo "Copiando archivos y actualizando .desktop..."
 
