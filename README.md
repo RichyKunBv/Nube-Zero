@@ -1,6 +1,6 @@
 # Nube-Zero ☁️
 
-[![Versión](https://img.shields.io/badge/Versión-v0.8.0-blue.svg)](https://github.com/RichyKunBv/Nube-Zero)
+[![Versión](https://img.shields.io/badge/Versión-v0.8.1-blue.svg)](https://github.com/RichyKunBv/Nube-Zero)
 [![Status](https://img.shields.io/badge/Estado-Desarrollo-yellow.svg)](https://github.com/RichyKunBv/Nube-Zero)
 
 ---
@@ -14,7 +14,7 @@
 
 ## ✨ Características Principales
 
-- 🚀 **Experiencia y Usabilidad Mejorada en Escritorio y Móvil (v0.8.1)**:
+- 🚀 **Experiencia y Usabilidad Mejorada en Escritorio y Móvil**:
   - 🎨 **Chips de Filtrado por Categoría**: Filtro instantáneo de archivos por tipo (`✨ Todos`, `🖼️ Imágenes`, `🎬 Videos`, `📃 Documentos`, `📱 APKs`, `🗜️ Comprimidos`) en Desktop y Móvil.
   - 🔀 **Ordenación Dinámica**: Ordena tus archivos y carpetas por **Nombre (A-Z)**, **Más recientes** o **Tamaño (Mayor a menor)** sin recargar la página.
   - ⊞ **Vista de Cuadrícula / Grid y Lista**: Alterna con un solo clic/toque entre la vista clásica de lista y la vista de cuadrícula visual con miniaturas grandes.
