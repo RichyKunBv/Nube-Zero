@@ -23,9 +23,9 @@ mount -o remount,rw / 2>/dev/null || true
 mount -o remount,rw /boot/firmware 2>/dev/null || true
 
 function print_header() {
-  echo -e "${CYAN}==========================================${NC}"
-  echo -e "${CYAN}             ☁️ Nube-Zero CLI             ${NC}"
-  echo -e "${CYAN}==========================================${NC}"
+  echo -e "${CYAN}===========================================================${NC}"
+  echo -e "${CYAN}                       ☁️ Nube-Zero CLI             ${NC}"
+  echo -e "${CYAN}===========================================================${NC}"
 }
 
 function pause_menu() {

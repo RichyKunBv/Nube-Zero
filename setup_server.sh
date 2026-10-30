@@ -21,9 +21,9 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-echo -e "${GREEN}==========================================${NC}"
-echo -e "${GREEN}    Instalador de Nube-Zero (Server)      ${NC}"
-echo -e "${GREEN}==========================================${NC}"
+echo -e "${GREEN}===========================================================${NC}"
+echo -e "${GREEN}        Instalador y Actualizador de Nube-Zero (Server)      ${NC}"
+echo -e "${GREEN}===========================================================${NC}"
 
 if [ "$EUID" -ne 0 ]; then
   echo -e "${RED}ERROR: Por favor, ejecuta este script como root (usando sudo).${NC}"
