@@ -111,16 +111,6 @@ jobs:
           fi
           cp "$APK_FILE" ${{ github.workspace }}/${{ matrix.asset_name }}
 
-      - name: Compilar Servidor (Raspberry Pi / Mono)
-        if: matrix.rid == 'android' # Aprovechamos el runner de Ubuntu para compilar el server 1 sola vez
-        run: |
-          cd src/server
-          dotnet publish -c Release -f net472 -r linux-arm -o publish_out
-          cd publish_out
-          mkdir -p cli
-          cp ../../../cli/nubezero.sh cli/
-          zip -r ${{ github.workspace }}/NubeZero-Server.zip *
-
       # --- EMPAQUETADO WINDOWS ---
       - name: Generar Instalador (Windows)
         if: runner.os == 'Windows'
@@ -300,7 +290,7 @@ jobs:
           
       - name: Subir Artefacto temporal para Pages
         if: github.event_name == 'release' && runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: installers-windows-${{ matrix.arch }}
           path: ${{ github.workspace }}/${{ matrix.asset_name }}
@@ -308,7 +298,7 @@ jobs:
           
       - name: Subir Artefactos para PR o Manual
         if: github.event_name != 'release'
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: installers-${{ matrix.rid }}
           path: ${{ github.workspace }}/NubeZero*
@@ -316,21 +306,58 @@ jobs:
       # 🔹 Debug: Si falla, subimos la carpeta de compilación para inspeccionar
       - name: Subir artefactos de compilación (debug)
         if: failure()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: debug-${{ matrix.rid }}
           path: src/desktop/publish_out
 
+  build-server:
+    name: Empaquetar servidor
+    runs-on: ubuntu-latest
+    steps:
+      - name: Obtener código fuente
+        uses: actions/checkout@v5
+
+      - name: Instalar .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Compilar Servidor (Raspberry Pi / Mono)
+        run: |
+          cd src/server
+          dotnet publish -c Release -f net472 -r linux-arm -o publish_out
+          cd publish_out
+          mkdir -p cli
+          cp ../../../cli/nubezero.sh cli/
+          zip -r ${{ github.workspace }}/NubeZero-Server.zip *
+
+      - name: Subir Servidor a GitHub Releases
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v3
+        with:
+          files: ${{ github.workspace }}/NubeZero-Server.zip
+
+      - name: Subir Artefacto del servidor para PR o Manual
+        if: github.event_name != 'release'
+        uses: actions/upload-artifact@v7
+        with:
+          name: installers-server
+          path: ${{ github.workspace }}/NubeZero-Server.zip
+          retention-days: 1
+
   deploy-pages:
     name: Publicar Instaladores en GitHub Pages
-    needs: build-and-package
+    needs:
+      - build-and-package
+      - build-server
     runs-on: ubuntu-latest
     if: github.event_name == 'release'
     permissions:
       contents: write
     steps:
       - name: Descargar instaladores de Windows
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: public-installers
           pattern: installers-windows-*
