@@ -14,33 +14,33 @@
 
 ## ✨ Características Principales
 
-- 🚀 **Experiencia y Usabilidad Mejorada en Escritorio y Móvil (v0.8.5)**:
+- 🚀 **Experiencia y Usabilidad Mejorada en Escritorio y Móvil (v0.8.1)**:
   - 🎨 **Chips de Filtrado por Categoría**: Filtro instantáneo de archivos por tipo (`✨ Todos`, `🖼️ Imágenes`, `🎬 Videos`, `📃 Documentos`, `📱 APKs`, `🗜️ Comprimidos`) en Desktop y Móvil.
   - 🔀 **Ordenación Dinámica**: Ordena tus archivos y carpetas por **Nombre (A-Z)**, **Más recientes** o **Tamaño (Mayor a menor)** sin recargar la página.
   - ⊞ **Vista de Cuadrícula / Grid y Lista**: Alterna con un solo clic/toque entre la vista clásica de lista y la vista de cuadrícula visual con miniaturas grandes.
   - ⚡ **Indicador de Transferencia en Tiempo Real con Velocidad**: Muestra la velocidad real de transferencia en **KB/s o MB/s** y botón de **Cancelar transferencia** inmediata para subidas o descargas.
   - 💬 **Buscador Integrado en Notas y Portapapeles**: Encuentra al instante notas o enlaces compartidos con filtrado en vivo tanto en PC como en Android.
-- 🚀 **Experiencia y Usabilidad Tipo Mega / MediaFire (v0.8.0)**:
+- 🚀 **Experiencia y Usabilidad Tipo Mega / MediaFire**:
   - 🔤 **Orden Alfabético Inteligente**: Listado organizado de forma clara y predecible; carpetas ordenadas de la A a la Z primero, seguidas por los archivos de la A a la Z en todos los clientes y servidor.
   - 🔍 **Buscador y Filtro en Tiempo Real**: Barra de búsqueda rápida integrada en la vista de archivos tanto en PC como en móvil para encontrar al instante cualquier elemento.
   - 📁 **Creación de Carpetas desde la UI**: Botón directo para crear nuevas subcarpetas interactivamente sin salir de la app.
   - 📦 **Mover Archivos y Carpetas**: Nuevo endpoint `/api/move` y menú contextual para reubicar archivos o directorios completos entre carpetas con actualización automática de metadatos.
   - ✏️ **Renombrar**: Función para cambiar el nombre de cualquier archivo o carpeta desde el menú de opciones (`⋮`).
   - 📜 **Scroll y Accesibilidad en Login**: Barra de desplazamiento visible en la pantalla de inicio de sesión para pantallas pequeñas o cuando se despliega el teclado virtual en Android y PC.
-- 📦 **Subida de archivos grandes (v0.7.1)**: transferencias en streaming con un timeout ampliado para evitar cortes en archivos de varios cientos de MB.
-- 🔐 **Recordar credenciales de forma segura (v0.7.1)**: opción para guardar la contraseña en el almacenamiento seguro de Android o en el llavero de macOS y recuperar la sesión al volver a abrir la aplicación.
-- 📥 **Descargas Android más fiables (v0.7.1)**: selector nativo para guardar directamente en Descargas u otra ubicación, sin depender del menú Compartir del fabricante.
-- 🔄 **Actualización desde el cliente (v0.7.1)**: comprueba GitHub y abre el instalador de la plataforma; en Android descarga el APK y solicita confirmación al instalador del sistema.
+- 📦 **Subida de archivos grandes**: transferencias en streaming con un timeout ampliado para evitar cortes en archivos de varios cientos de MB.
+- 🔐 **Recordar credenciales de forma segura**: opción para guardar la contraseña en el almacenamiento seguro de Android o en el llavero de macOS y recuperar la sesión al volver a abrir la aplicación.
+- 📥 **Descargas Android más fiables**: selector nativo para guardar directamente en Descargas u otra ubicación, sin depender del menú Compartir del fabricante.
+- 🔄 **Actualización desde el cliente**: comprueba GitHub y abre el instalador de la plataforma; en Android descarga el APK y solicita confirmación al instalador del sistema.
 - 📏 **Tamaños de archivo claros**: la interfaz etiqueta KiB/MiB/GiB para indicar explícitamente que convierte usando base 1024.
-- 📊 **Transferencias más claras y seguras (v0.7.4)**: progreso de subida/descarga, cola FIFO compartida para limitar a una transferencia activa, sesiones extendidas durante operaciones largas y publicación de archivos solo después de verificar su recepción completa.
-- 🔐 **Seguridad de transporte y archivos (v0.7.5)**: HTTPS obligatorio con certificado local fijado por huella SHA-256, cifrado autenticado en streaming desde los clientes y almacenamiento de archivos cifrados en el servidor. Las contraseñas usan PBKDF2-SHA256 con sal y las sesiones usan tokens aleatorios.
-- 🔁 **Conexión más sencilla (v0.7.6)**: los clientes recuerdan la URL del servidor y la huella SHA-256 verificada al cerrar la aplicación, para que no tengas que volver a introducirlas. Cerrar sesión elimina las credenciales y conserva esos datos de conexión. La contraseña solo se guarda si eliges recordarla y se almacena en el mecanismo seguro de la plataforma.
-- 🧰 **Diagnóstico y empaquetado de clientes (v0.7.7)**: los errores HTTP durante la conexión muestran el detalle devuelto por el servidor, incluyendo fallos al cargar la clave o los archivos. El empaquetado de macOS prepara por sí mismo los bundles e identifica correctamente el ejecutable de la aplicación.
-- 🌐 **Compatibilidad del proxy HTTPS (v0.7.8)**: el servidor acepta el encabezado `Host` público reenviado por stunnel y conserva el acceso al puerto HTTP interno restringido a conexiones locales.
-- 🗂️ **Navegación y vistas previas (v0.7.4)**: navegación por carpetas, iconos por tipo y miniaturas de imágenes generadas y cacheadas en los clientes. Los primeros fotogramas de video se generan localmente para clips de hasta 32 MiB; en escritorio se requiere `ffmpeg` disponible en el sistema.
-- 🔍 **Descubrimiento Automático Silencioso (v0.6.0)**: Encuentra tus servidores Nube-Zero en la red local bajo demanda con un solo clic (`🔍`). Funciona mediante un protocolo reactivo *Probe-Response* por UDP con clave de autenticación: **cero saturación de Wi-Fi, cero pings continuos y 0% de uso de CPU en reposo**.
+- 📊 **Transferencias más claras y seguras**: progreso de subida/descarga, cola FIFO compartida para limitar a una transferencia activa, sesiones extendidas durante operaciones largas y publicación de archivos solo después de verificar su recepción completa.
+- 🔐 **Seguridad de transporte y archivos**: HTTPS obligatorio con certificado local fijado por huella SHA-256, cifrado autenticado en streaming desde los clientes y almacenamiento de archivos cifrados en el servidor. Las contraseñas usan PBKDF2-SHA256 con sal y las sesiones usan tokens aleatorios.
+- 🔁 **Conexión más sencilla**: los clientes recuerdan la URL del servidor y la huella SHA-256 verificada al cerrar la aplicación, para que no tengas que volver a introducirlas. Cerrar sesión elimina las credenciales y conserva esos datos de conexión. La contraseña solo se guarda si eliges recordarla y se almacena en el mecanismo seguro de la plataforma.
+- 🧰 **Diagnóstico y empaquetado de clientes**: los errores HTTP durante la conexión muestran el detalle devuelto por el servidor, incluyendo fallos al cargar la clave o los archivos. El empaquetado de macOS prepara por sí mismo los bundles e identifica correctamente el ejecutable de la aplicación.
+- 🌐 **Compatibilidad del proxy HTTPS**: el servidor acepta el encabezado `Host` público reenviado por stunnel y conserva el acceso al puerto HTTP interno restringido a conexiones locales.
+- 🗂️ **Navegación y vistas previas**: navegación por carpetas, iconos por tipo y miniaturas de imágenes generadas y cacheadas en los clientes. Los primeros fotogramas de video se generan localmente para clips de hasta 32 MiB; en escritorio se requiere `ffmpeg` disponible en el sistema.
+- 🔍 **Descubrimiento Automático Silencioso**: Encuentra tus servidores Nube-Zero en la red local bajo demanda con un solo clic (`🔍`). Funciona mediante un protocolo reactivo *Probe-Response* por UDP con clave de autenticación: **cero saturación de Wi-Fi, cero pings continuos y 0% de uso de CPU en reposo**.
 - 🏷️ **Soporte Multi-servidor y Nombres Personalizados**: Cada Raspberry Pi puede tener su propio nombre identificador (`--name "Mi Servidor"`), facilitando elegir entre múltiples servidores desde la pantalla de inicio de los clientes.
-- 👥 **Sistema de Roles y Usuarios Granular (v0.5.0)**:
+- 👥 **Sistema de Roles y Usuarios Granular**:
   - **Admin**: Control total, creación y eliminación de usuarios, gestión de accesos.
   - **Estándar**: Subida, descarga, navegación y eliminación de archivos.
   - **Visitante**: Modo solo lectura/descarga, ideal para invitados o consultas temporales.
