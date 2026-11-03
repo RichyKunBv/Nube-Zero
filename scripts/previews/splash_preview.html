@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulador Splash Screen - Nube-Zero Mobile</title>
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --card-bg: #1e293b;
+      --border-color: #334155;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-hover: #0ea5e9;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background: radial-gradient(circle at top, #1e293b 0%, #090d16 100%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    header h1 {
+      font-size: 24px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    header p {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin-top: 6px;
+    }
+
+    .main-container {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 32px;
+      width: 100%;
+      max-width: 960px;
+    }
+
+    /* Panel de controles */
+    .controls-card {
+      background: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 24px;
+      width: 100%;
+      max-width: 380px;
+      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+    }
+
+    .control-group {
+      margin-bottom: 20px;
+    }
+
+    .control-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .color-picker-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    input[type="color"] {
+      appearance: none;
+      -webkit-appearance: none;
+      border: 2px solid var(--border-color);
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    input[type="color"]::-webkit-color-swatch-wrapper {
+      padding: 0;
+    }
+
+    input[type="color"]::-webkit-color-swatch {
+      border: none;
+      border-radius: 10px;
+    }
+
+    .text-input {
+      flex: 1;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 10px 14px;
+      color: #fff;
+      font-size: 14px;
+      font-family: monospace;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .text-input:focus {
+      border-color: var(--accent);
+    }
+
+    .palette-shortcuts {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .palette-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      cursor: pointer;
+      transition: transform 0.15s, border-color 0.15s;
+    }
+
+    .palette-btn:hover {
+      transform: scale(1.15);
+      border-color: #fff;
+    }
+
+    .slider-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    input[type="range"] {
+      flex: 1;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .badge-val {
+      background: rgba(15, 23, 42, 0.9);
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 13px;
+      color: var(--accent);
+      border: 1px solid var(--border-color);
+    }
+
+    .segmented-control {
+      display: flex;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 3px;
+      gap: 4px;
+    }
+
+    .segment-btn {
+      flex: 1;
+      padding: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      border: none;
+      border-radius: 9px;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .segment-btn.active {
+      background: var(--accent);
+      color: #090d16;
+    }
+
+    /* XML preview */
+    .xml-preview {
+      margin-top: 24px;
+      padding-top: 18px;
+      border-top: 1px solid var(--border-color);
+    }
+
+    .xml-box {
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.5;
+      color: #38bdf8;
+      word-break: break-all;
+      position: relative;
+    }
+
+    .copy-btn {
+      margin-top: 10px;
+      width: 100%;
+      background: var(--accent);
+      color: #090d16;
+      border: none;
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .copy-btn:hover {
+      background: var(--accent-hover);
+    }
+
+    /* Teléfono Mockup */
+    .phone-wrapper {
+      position: relative;
+      width: 290px;
+      height: 590px;
+      background: #020617;
+      border-radius: 44px;
+      padding: 12px;
+      border: 5px solid #334155;
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.1);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Isla superior */
+    .island {
+      position: absolute;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 76px;
+      height: 18px;
+      background: #090d16;
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      z-index: 10;
+    }
+
+    .island-lens {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #1e293b;
+      border: 1px solid #334155;
+    }
+
+    .island-speaker {
+      width: 24px;
+      height: 3px;
+      border-radius: 2px;
+      background: #1e293b;
+    }
+
+    /* Pantalla interna */
+    .phone-screen {
+      width: 100%;
+      height: 100%;
+      border-radius: 34px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      transition: background-color 0.25s ease;
+      background-color: #68B2D8;
+    }
+
+    /* Status bar */
+    .status-bar {
+      position: absolute;
+      top: 14px;
+      left: 20px;
+      right: 20px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      font-weight: 700;
+      color: rgba(0, 0, 0, 0.75);
+      z-index: 5;
+    }
+
+    /* Contenedor del splash */
+    .splash-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      width: 128px;
+      height: 128px;
+    }
+
+    .mask-circle {
+      border-radius: 50%;
+      overflow: hidden;
+    }
+
+    .splash-img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    /* Barra inferior */
+    .nav-bar {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 110px;
+      height: 4px;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 4px;
+    }
+
+    /* File picker helper */
+    .file-input-wrapper {
+      margin-top: 14px;
+      font-size: 12px;
+      text-align: center;
+    }
+
+    .file-input-label {
+      color: var(--accent);
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    #customFileInput {
+      display: none;
+    }
+
+    .reload-note {
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 14px;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>📱 Simulador Splash Screen de Nube-Zero</h1>
+    <p>Visualiza en vivo cómo procesa .NET MAUI y Android tu splash screen</p>
+  </header>
+
+  <div class="main-container">
+
+    <!-- Panel de controles -->
+    <div class="controls-card">
+      <div class="control-group">
+        <label class="control-label">Color de Fondo (Color)</label>
+        <div class="color-picker-row">
+          <input type="color" id="colorPicker" value="#68B2D8">
+          <input type="text" id="colorHex" class="text-input" value="#68B2D8" maxlength="7">
+        </div>
+        <div class="palette-shortcuts">
+          <button class="palette-btn" style="background:#68B2D8" title="Celeste Actual" onclick="setColor('#68B2D8')"></button>
+          <button class="palette-btn" style="background:#512BD4" title="Púrpura MAUI" onclick="setColor('#512BD4')"></button>
+          <button class="palette-btn" style="background:#0F172A" title="Azul Oscuro" onclick="setColor('#0F172A')"></button>
+          <button class="palette-btn" style="background:#121212" title="Negro OLED" onclick="setColor('#121212')"></button>
+          <button class="palette-btn" style="background:#FFFFFF" title="Blanco Puro" onclick="setColor('#FFFFFF')"></button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label class="control-label">Tamaño Base (BaseSize)</label>
+        <div class="slider-container">
+          <input type="range" id="sizeSlider" min="64" max="240" step="4" value="128">
+          <span class="badge-val" id="sizeLabel">128×128 dp</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label class="control-label">Modo Android</label>
+        <div class="segmented-control">
+          <button id="btnCircle" class="segment-btn active" onclick="setMask('circle')">Android 12+ (Círculo)</button>
+          <button id="btnFull" class="segment-btn" onclick="setMask('full')">Completo (Android ≤11)</button>
+        </div>
+      </div>
+
+      <div class="file-input-wrapper">
+        <label class="file-input-label" for="customFileInput">📁 Probar otro archivo SVG / PNG local</label>
+        <input type="file" id="customFileInput" accept=".svg,.png">
+      </div>
+
+      <!-- Bloque de código XML listo para pegar -->
+      <div class="xml-preview">
+        <label class="control-label">Línea para NubeZero.Mobile.csproj</label>
+        <div class="xml-box" id="xmlCode">
+&lt;MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#68B2D8" BaseSize="128,128" /&gt;
+        </div>
+        <button class="copy-btn" id="copyBtn" onclick="copyXml()">Copiar línea XML</button>
+      </div>
+
+      <div class="reload-note">
+        💡 Si editas <code>src/mobile/Resources/Splash/splash.svg</code>, solo recarga esta página (<b>Cmd + R</b>).
+      </div>
+    </div>
+
+    <!-- Teléfono Mockup -->
+    <div class="phone-wrapper">
+      <div class="island">
+        <div class="island-speaker"></div>
+        <div class="island-lens"></div>
+      </div>
+
+      <div class="phone-screen" id="screen">
+        <div class="status-bar" id="statusBar">
+          <span>09:41</span>
+          <span>5G  100%</span>
+        </div>
+
+        <div class="splash-container mask-circle" id="splashBox">
+          <img class="splash-img" id="splashImg" src="../../src/mobile/Resources/Splash/splash.svg" alt="Splash Screen">
+        </div>
+
+        <div class="nav-bar" id="navBar"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const screen = document.getElementById('screen');
+    const splashBox = document.getElementById('splashBox');
+    const splashImg = document.getElementById('splashImg');
+    const colorPicker = document.getElementById('colorPicker');
+    const colorHex = document.getElementById('colorHex');
+    const sizeSlider = document.getElementById('sizeSlider');
+    const sizeLabel = document.getElementById('sizeLabel');
+    const xmlCode = document.getElementById('xmlCode');
+    const statusBar = document.getElementById('statusBar');
+    const navBar = document.getElementById('navBar');
+    const btnCircle = document.getElementById('btnCircle');
+    const btnFull = document.getElementById('btnFull');
+    const copyBtn = document.getElementById('copyBtn');
+    const customFileInput = document.getElementById('customFileInput');
+
+    function updateXml(color, size) {
+      xmlCode.textContent = `<MauiSplashScreen Include="Resources\\Splash\\splash.svg" Color="${color}" BaseSize="${size},${size}" />`;
+    }
+
+    function setColor(color) {
+      colorPicker.value = color;
+      colorHex.value = color.toUpperCase();
+      screen.style.backgroundColor = color;
+      updateContrast(color);
+      updateXml(color, sizeSlider.value);
+    }
+
+    function updateContrast(hexColor) {
+      // Ajustar barra de estado según luminosidad del fondo
+      const hex = hexColor.replace('#', '');
+      if (hex.length === 6) {
+        const r = parseInt(hex.substr(0, 2), 16);
+        const g = parseInt(hex.substr(2, 2), 16);
+        const b = parseInt(hex.substr(4, 2), 16);
+        const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+        const isDark = yiq < 128;
+        statusBar.style.color = isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.75)';
+        navBar.style.backgroundColor = isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)';
+      }
+    }
+
+    colorPicker.addEventListener('input', (e) => setColor(e.target.value));
+
+    colorHex.addEventListener('input', (e) => {
+      let val = e.target.value.trim();
+      if (!val.startsWith('#')) val = '#' + val;
+      if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+        setColor(val);
+      }
+    });
+
+    sizeSlider.addEventListener('input', (e) => {
+      const s = e.target.value;
+      sizeLabel.textContent = `${s}×${s} dp`;
+      splashBox.style.width = `${s}px`;
+      splashBox.style.height = `${s}px`;
+      updateXml(colorHex.value, s);
+    });
+
+    function setMask(mode) {
+      if (mode === 'circle') {
+        splashBox.classList.add('mask-circle');
+        btnCircle.classList.add('active');
+        btnFull.classList.remove('active');
+      } else {
+        splashBox.classList.remove('mask-circle');
+        btnFull.classList.add('active');
+        btnCircle.classList.remove('active');
+      }
+    }
+
+    customFileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          splashImg.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    function copyXml() {
+      const text = xmlCode.textContent.trim();
+      navigator.clipboard.writeText(text).then(() => {
+        copyBtn.textContent = '¡Copiado al portapapeles!';
+        setTimeout(() => {
+          copyBtn.textContent = 'Copiar línea XML';
+        }, 1800);
+      });
+    }
+
+    // Inicializar contraste de inicio
+    updateContrast('#68B2D8');
+  </script>
+</body>
+</html>
+
