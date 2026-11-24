@@ -346,6 +346,75 @@ jobs:
           path: ${{ github.workspace }}/NubeZero-Server.zip
           retention-days: 1
 
+  build-ultraconf:
+    name: Empaquetar UltraConf AppImage (Linux x64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Obtener código fuente
+        uses: actions/checkout@v5
+
+      - name: Instalar .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Compilar UltraConf Linux x64
+        run: |
+          cd src/ultraconf
+          dotnet publish -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -o publish_out
+
+      - name: Preparar AppDir para AppImage
+        run: |
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          
+          # Copiar binarios compilados
+          cp -r src/ultraconf/publish_out/* AppDir/usr/bin/
+          
+          # Enlazar ejecutable principal
+          if [ -f "AppDir/usr/bin/NubeZero.UltraConf" ]; then
+            chmod +x AppDir/usr/bin/NubeZero.UltraConf
+          fi
+          
+          cp src/ultraconf/Assets/icon.png AppDir/usr/share/icons/hicolor/256x256/apps/NubeZero-UltraConf.png
+          cp src/ultraconf/Assets/icon.png AppDir/NubeZero-UltraConf.png
+          
+          cp src/ultraconf/NubeZero.UltraConf.desktop AppDir/usr/share/applications/
+          cp src/ultraconf/NubeZero.UltraConf.desktop AppDir/
+          sed -i "s/^Exec=.*/Exec=NubeZero.UltraConf/" AppDir/usr/share/applications/NubeZero.UltraConf.desktop
+          sed -i "s/^Exec=.*/Exec=NubeZero.UltraConf/" AppDir/NubeZero.UltraConf.desktop
+          sed -i "s/^Icon=.*/Icon=NubeZero-UltraConf/" AppDir/usr/share/applications/NubeZero.UltraConf.desktop
+          sed -i "s/^Icon=.*/Icon=NubeZero-UltraConf/" AppDir/NubeZero.UltraConf.desktop
+
+      - name: Generar AppImage de UltraConf (Linux x64)
+        run: |
+          cat << 'EOF' > AppDir/AppRun
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "${0}")")"
+          exec "${HERE}/usr/bin/NubeZero.UltraConf" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+          wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          export UPDATE_INFORMATION=""
+          ./appimagetool-x86_64.AppImage AppDir NubeZero-UltraConf-x64.AppImage || ./appimagetool-x86_64.AppImage AppDir NubeZero-UltraConf-x64.AppImage -n
+
+      - name: Subir UltraConf a GitHub Releases
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v3
+        with:
+          files: NubeZero-UltraConf-x64.AppImage
+
+      - name: Subir Artefacto UltraConf
+        if: github.event_name != 'release'
+        uses: actions/upload-artifact@v7
+        with:
+          name: installers-ultraconf-linux-x64
+          path: NubeZero-UltraConf-x64.AppImage
+          retention-days: 1
+
   deploy-pages:
     name: Publicar Instaladores en GitHub Pages
     needs:

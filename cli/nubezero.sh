@@ -290,8 +290,14 @@ function show_status_dashboard() {
     sd_status="${CYAN}🛡️ Blindada en fstab (activo al reiniciar)${NC}"
   fi
 
+  local maint_status="${GREEN}Normal (Desactivado)${NC}"
+  if [ -f "$INSTALL_DIR/bin/maintenance.flag" ] || [ -f "$INSTALL_DIR/maintenance.flag" ]; then
+    maint_status="${YELLOW}⚠️ ACTIVADO (Reemplazo de hardware)${NC}"
+  fi
+
   echo -e "\n${CYAN}┌──────────────── Estado Actual del Servidor ────────────────┐${NC}"
   echo -e "${CYAN}│${NC}  • Servicio:        $svc_status"
+  echo -e "${CYAN}│${NC}  • Mantenimiento:   $maint_status"
   echo -e "${CYAN}│${NC}  • Nombre en Red:   ${YELLOW}$current_name${NC}"
   echo -e "${CYAN}│${NC}  • Puerto HTTPS:    ${YELLOW}$current_port${NC}"
   echo -e "${CYAN}│${NC}  • Almacenamiento:  ${YELLOW}$storage_info${NC}"
@@ -358,9 +364,11 @@ function menu_storage() {
   echo ""
   echo "  1) Conectar / Montar memoria USB (OTG)"
   echo "  2) Desvincular almacenamiento USB y volver a MicroSD local"
+  echo "  3) 🛠️  Activar Modo Mantenimiento (Desmontar disco seguro para reemplazo)"
+  echo "  4) ✅ Desactivar Modo Mantenimiento (Reanudar servidor normal)"
   echo "  0) Volver al menú principal"
   echo ""
-  echo -ne "${CYAN}Selecciona una opción [0-2]: ${NC}"
+  echo -ne "${CYAN}Selecciona una opción [0-4]: ${NC}"
   read ST_OPT
 
   case "$ST_OPT" in
@@ -477,6 +485,37 @@ function menu_storage() {
         fi
       else
         echo -e "${YELLOW}Operación cancelada.${NC}"
+      fi
+      pause_menu
+      ;;
+
+    3)
+      echo -e "\n${YELLOW}Activando Modo Mantenimiento...${NC}"
+      mount -o remount,rw / 2>/dev/null || true
+      mkdir -p "$INSTALL_DIR/bin"
+      touch "$INSTALL_DIR/bin/maintenance.flag"
+      touch "$INSTALL_DIR/maintenance.flag" 2>/dev/null || true
+      sync
+      if [ -n "$current_storage" ] && mountpoint -q "$current_storage" 2>/dev/null; then
+        echo -e "Desmontando de forma segura la unidad en $current_storage..."
+        umount "$current_storage" 2>/dev/null || umount -l "$current_storage" 2>/dev/null || true
+      fi
+      echo -e "${GREEN}✓ Modo Mantenimiento ACTIVADO.${NC}"
+      echo -e "${CYAN}La unidad de almacenamiento ha sido sincronizada y desmontada.${NC}"
+      echo -e "${YELLOW}Ya puedes desconectar el disco o apagar la Pi de forma segura.${NC}"
+      pause_menu
+      ;;
+
+    4)
+      echo -e "\n${YELLOW}Desactivando Modo Mantenimiento...${NC}"
+      mount -o remount,rw / 2>/dev/null || true
+      rm -f "$INSTALL_DIR/bin/maintenance.flag" "$INSTALL_DIR/maintenance.flag"
+      if [ -n "$current_storage" ] && ! mountpoint -q "$current_storage" 2>/dev/null; then
+        echo -e "Volviendo a montar almacenamiento en $current_storage..."
+        mount -a 2>/dev/null || true
+      fi
+      if restart_server_services; then
+        echo -e "${GREEN}✓ Modo Mantenimiento DESACTIVADO y servidor reanudado con éxito.${NC}"
       fi
       pause_menu
       ;;
@@ -938,12 +977,53 @@ case "$1" in
   logs)
     journalctl -u nubezero -f
     ;;
+  maintenance)
+    case "$2" in
+      on|enable)
+        echo -e "\n${YELLOW}Activando Modo Mantenimiento...${NC}"
+        mount -o remount,rw / 2>/dev/null || true
+        mkdir -p "$INSTALL_DIR/bin"
+        touch "$INSTALL_DIR/bin/maintenance.flag"
+        touch "$INSTALL_DIR/maintenance.flag" 2>/dev/null || true
+        sync
+        local exec_start
+        exec_start=$(sed -n 's/^ExecStart=//p' "$SERVICE_FILE" | head -n 1)
+        local cur_st=""
+        if [[ "$exec_start" =~ --storage[[:space:]]\"([^\"]+)\" ]]; then cur_st=${BASH_REMATCH[1]};
+        elif [[ "$exec_start" =~ --storage[[:space:]]([^[:space:]]+) ]]; then cur_st=${BASH_REMATCH[1]}; fi
+        if [ -n "$cur_st" ] && mountpoint -q "$cur_st" 2>/dev/null; then
+          echo -e "Desmontando de forma segura la unidad en $cur_st..."
+          umount "$cur_st" 2>/dev/null || umount -l "$cur_st" 2>/dev/null || true
+        fi
+        echo -e "${GREEN}✓ Modo Mantenimiento ACTIVADO. Seguro para retirar disco.${NC}"
+        ;;
+      off|disable)
+        echo -e "\n${YELLOW}Desactivando Modo Mantenimiento...${NC}"
+        mount -o remount,rw / 2>/dev/null || true
+        rm -f "$INSTALL_DIR/bin/maintenance.flag" "$INSTALL_DIR/maintenance.flag"
+        local exec_start
+        exec_start=$(sed -n 's/^ExecStart=//p' "$SERVICE_FILE" | head -n 1)
+        local cur_st=""
+        if [[ "$exec_start" =~ --storage[[:space:]]\"([^\"]+)\" ]]; then cur_st=${BASH_REMATCH[1]};
+        elif [[ "$exec_start" =~ --storage[[:space:]]([^[:space:]]+) ]]; then cur_st=${BASH_REMATCH[1]}; fi
+        if [ -n "$cur_st" ] && ! mountpoint -q "$cur_st" 2>/dev/null; then
+          mount -a 2>/dev/null || true
+        fi
+        restart_server_services
+        echo -e "${GREEN}✓ Modo Mantenimiento DESACTIVADO.${NC}"
+        ;;
+      *)
+        echo "Uso: nubezero maintenance [on|off]"
+        ;;
+    esac
+    ;;
   *)
     echo "Uso: nubezero [opción]"
     echo ""
     echo "Opciones:"
     echo "  -c, config       Abre el panel interactivo modular de configuración"
     echo "  status           Muestra el estado actual del servidor (dashboard)"
+    echo "  maintenance      Gestiona modo mantenimiento (nubezero maintenance on|off)"
     echo "  fingerprint      Muestra la huella SHA-256 para configurar los clientes"
     echo "  -u, update       Menú de actualización (Servidor o CLI)"
     echo "  update-cli       Actualiza exclusivamente la herramienta CLI desde main"

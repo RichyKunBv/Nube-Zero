@@ -19,6 +19,7 @@ namespace NubeZero.Server
         private static DiscoveryService _discoveryService;
         private static FileTransferQueueService _fileTransferQueueService;
         private static NotesController _notesController;
+        private static string _configuredStoragePath;
 
         static async Task Main(string[] args)
         {
@@ -58,10 +59,20 @@ namespace NubeZero.Server
             }
 
             Console.WriteLine($"Iniciando servidor Nube-Zero detrás del proxy TLS en el puerto {publicPort}...");
+            _configuredStoragePath = storagePath;
             EncryptionService.ValidateConfiguration();
             
+            if (MaintenanceService.IsMaintenanceMode)
+            {
+                Console.WriteLine("⚠️ [ATENCIÓN] El servidor está en MODO MANTENIMIENTO.");
+                Console.WriteLine("⚠️ El acceso normal a archivos y base de datos de usuarios está suspendido para reemplazo de hardware.");
+            }
+
             _storageService = new StorageService(storagePath);
-            EncryptionService.MigrateLegacyFiles(_storageService.BasePath);
+            if (!MaintenanceService.IsMaintenanceMode)
+            {
+                EncryptionService.MigrateLegacyFiles(_storageService.BasePath);
+            }
             _dbContext = new DatabaseContext(storagePath);
             _authController = new AuthController(_dbContext);
             _authInterceptor = new AuthInterceptor(_dbContext);
@@ -149,6 +160,17 @@ namespace NubeZero.Server
                     return;
                 }
 
+                if (request.Url.AbsolutePath == "/api/status" && request.HttpMethod == "GET")
+                {
+                    response.ContentType = "application/json";
+                    response.StatusCode = 200;
+                    string maintenanceJson = MaintenanceService.IsMaintenanceMode ? "true" : "false";
+                    byte[] buffer = System.Text.Encoding.UTF8.GetBytes($"{{\"status\": \"{(MaintenanceService.IsMaintenanceMode ? "maintenance" : "online")}\", \"maintenance\": {maintenanceJson}, \"version\": \"{NubeZero.Shared.AppVersion.Texto}\"}}");
+                    await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
+                    response.Close();
+                    return;
+                }
+
                 if (request.Url.AbsolutePath == "/api/login")
                 {
                     await _authController.HandleLoginAsync(context);
@@ -156,7 +178,7 @@ namespace NubeZero.Server
                 }
 
                 AuthSession session = null;
-                if (request.Url.AbsolutePath.StartsWith("/api/") && request.Url.AbsolutePath != "/api/status")
+                if (request.Url.AbsolutePath.StartsWith("/api/"))
                 {
                     session = _authInterceptor.ValidateSession(request);
                     if (session == null)
@@ -164,6 +186,61 @@ namespace NubeZero.Server
                         await _authInterceptor.WriteUnauthorizedAsync(response);
                         return;
                     }
+                }
+
+                // Rutas de Mantenimiento (Solo Administrador)
+                if (request.Url.AbsolutePath == "/api/system/maintenance/status" && request.HttpMethod == "GET")
+                {
+                    response.ContentType = "application/json";
+                    response.StatusCode = 200;
+                    string json = $"{{\"maintenance\": {(MaintenanceService.IsMaintenanceMode ? "true" : "false")}, \"storagePath\": \"{_storageService.BasePath.Replace("\\", "\\\\")}\"}}";
+                    byte[] buffer = System.Text.Encoding.UTF8.GetBytes(json);
+                    await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
+                    response.Close();
+                    return;
+                }
+                else if (request.Url.AbsolutePath == "/api/system/maintenance/enable" && request.HttpMethod == "POST")
+                {
+                    if (session.Role != "Admin")
+                    {
+                        await _authInterceptor.WriteForbiddenAsync(response, "Solo los administradores pueden activar el modo mantenimiento.");
+                        return;
+                    }
+
+                    bool ok = MaintenanceService.EnableMaintenance(_configuredStoragePath);
+                    response.ContentType = "application/json";
+                    response.StatusCode = ok ? 200 : 500;
+                    byte[] buffer = System.Text.Encoding.UTF8.GetBytes($"{{\"success\": {(ok ? "true" : "false")}, \"message\": \"Modo mantenimiento activado y almacenamiento preparado para desconexión.\"}}");
+                    await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
+                    response.Close();
+                    return;
+                }
+                else if (request.Url.AbsolutePath == "/api/system/maintenance/disable" && request.HttpMethod == "POST")
+                {
+                    if (session.Role != "Admin")
+                    {
+                        await _authInterceptor.WriteForbiddenAsync(response, "Solo los administradores pueden desactivar el modo mantenimiento.");
+                        return;
+                    }
+
+                    bool ok = MaintenanceService.DisableMaintenance();
+                    response.ContentType = "application/json";
+                    response.StatusCode = ok ? 200 : 500;
+                    byte[] buffer = System.Text.Encoding.UTF8.GetBytes($"{{\"success\": {(ok ? "true" : "false")}, \"message\": \"Modo mantenimiento desactivado. Operaciones normales restauradas.\"}}");
+                    await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
+                    response.Close();
+                    return;
+                }
+
+                // Si el servidor está en Mantenimiento, rechazar operaciones normales de archivos y notas
+                if (MaintenanceService.IsMaintenanceMode)
+                {
+                    response.StatusCode = 503; // Service Unavailable
+                    response.ContentType = "application/json";
+                    byte[] buffer = System.Text.Encoding.UTF8.GetBytes("{\"error\": \"Servidor en modo mantenimiento por reemplazo de disco duro o soporte de hardware.\", \"maintenance\": true}");
+                    await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
+                    response.Close();
+                    return;
                 }
 
                 if (request.Url.AbsolutePath == "/api/encryption-key" && request.HttpMethod == "GET")

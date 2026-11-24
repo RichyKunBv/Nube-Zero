@@ -1,0 +1,106 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="NubeZero.UltraConf.MainWindow"
+        Title="Nube-Zero UltraConf — Suite de Mantenimiento y Hardware"
+        Width="880" Height="680"
+        MinWidth="780" MinHeight="580"
+        Background="#121212"
+        WindowStartupLocation="CenterScreen">
+
+    <Grid RowDefinitions="Auto, *">
+        <!-- HEADER -->
+        <Border Grid.Row="0" Background="#1E1E2C" Padding="20,16" BorderBrush="#30FFFFFF" BorderThickness="0,0,0,1">
+            <Grid ColumnDefinitions="Auto, *, Auto">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                    <TextBlock Text="🛠️" FontSize="26" VerticalAlignment="Center"/>
+                    <StackPanel>
+                        <TextBlock Text="Nube-Zero UltraConf" FontSize="20" FontWeight="Black" Foreground="White"/>
+                        <TextBlock Text="Herramienta de Mantenimiento y Migración de Hardware" FontSize="12" Foreground="#888888"/>
+                    </StackPanel>
+                </StackPanel>
+                <Border Grid.Column="2" Background="#2000D2FF" CornerRadius="8" Padding="10,6" VerticalAlignment="Center">
+                    <TextBlock Name="TxtVersion" Text="v0.8.2" Foreground="#00D2FF" FontWeight="Bold" FontSize="12"/>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- CONTENIDO PRINCIPAL -->
+        <ScrollViewer Grid.Row="1" Padding="24">
+            <StackPanel Spacing="20" MaxWidth="800" HorizontalAlignment="Stretch">
+
+                <!-- TARJETA: MODO MANTENIMIENTO EN SERVIDOR (OPCIONAL) -->
+                <Border Background="#18FFFFFF" CornerRadius="12" Padding="18" BorderBrush="#25FFFFFF" BorderThickness="1">
+                    <StackPanel Spacing="12">
+                        <Grid ColumnDefinitions="*, Auto">
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="1. Control de Modo Mantenimiento (Raspberry Pi)" FontSize="15" FontWeight="Bold" Foreground="#00D2FF"/>
+                                <TextBlock Text="Detiene la escritura en el disco y prepara la desconexión segura sin apagar forzado." FontSize="12" Foreground="#A0A0A0" Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Name="BtnCheckServer" Content="Comprobar Servidor" Click="BtnCheckServer_Click" Background="#25FFFFFF" Foreground="White" CornerRadius="6" Padding="10,6" FontSize="12"/>
+                        </Grid>
+
+                        <Grid ColumnDefinitions="*, Auto, Auto" Margin="0,6,0,0">
+                            <TextBox Name="TxtServerUrl" Grid.Column="0" PlaceholderText="http://IP_DE_LA_PI:8080" Margin="0,0,8,0" Background="#20FFFFFF" Foreground="White"/>
+                            <TextBox Name="TxtAdminToken" Grid.Column="1" PasswordChar="•" PlaceholderText="Token Admin" Width="160" Margin="0,0,8,0" Background="#20FFFFFF" Foreground="White"/>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                                <Button Name="BtnEnableMaint" Content="Activar Mantenimiento" Click="BtnEnableMaint_Click" Background="#E5A93C" Foreground="Black" FontWeight="Bold" CornerRadius="6" Padding="10,6" FontSize="12"/>
+                                <Button Name="BtnDisableMaint" Content="Desactivar" Click="BtnDisableMaint_Click" Background="#25FFFFFF" Foreground="White" CornerRadius="6" Padding="10,6" FontSize="12"/>
+                            </StackPanel>
+                        </Grid>
+                        <TextBlock Name="TxtServerStatus" Text="💡 Puedes omitir este paso si ya apagaste la Pi y conectaste los dos discos a esta PC." FontSize="11" Foreground="#777777" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- TARJETA: TRANSFERENCIA DE DISCO A DISCO -->
+                <Border Background="#18FFFFFF" CornerRadius="12" Padding="18" BorderBrush="#25FFFFFF" BorderThickness="1">
+                    <StackPanel Spacing="16">
+                        <TextBlock Text="2. Migración / Clonación de Almacenamiento" FontSize="15" FontWeight="Bold" Foreground="#00D2FF"/>
+
+                        <!-- SELECCIÓN DE RUTAS / DISCOS -->
+                        <Grid ColumnDefinitions="*, *" Margin="0,4,0,0">
+                            <!-- ORIGEN -->
+                            <Border Grid.Column="0" Background="#14FFFFFF" CornerRadius="10" Padding="14" Margin="0,0,8,0">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="📁 Disco Viejo (Origen)" FontWeight="Bold" Foreground="#FFCC00"/>
+                                    <TextBox Name="TxtSourcePath" PlaceholderText="Ruta o punto de montaje de origen" Background="#20FFFFFF" Foreground="White"/>
+                                    <Button Name="BtnBrowseSource" Content="Examinar Carpeta..." Click="BtnBrowseSource_Click" Background="#25FFFFFF" Foreground="White" CornerRadius="6" Padding="10,6" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                                    <TextBlock Name="TxtSourceInfo" Text="Espacio detectado: --" FontSize="11" Foreground="#888888"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- DESTINO -->
+                            <Border Grid.Column="1" Background="#14FFFFFF" CornerRadius="10" Padding="14" Margin="8,0,0,0">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="💾 Disco Nuevo (Destino)" FontWeight="Bold" Foreground="#00FF88"/>
+                                    <TextBox Name="TxtTargetPath" PlaceholderText="Ruta o punto de montaje de destino" Background="#20FFFFFF" Foreground="White"/>
+                                    <Button Name="BtnBrowseTarget" Content="Examinar Carpeta..." Click="BtnBrowseTarget_Click" Background="#25FFFFFF" Foreground="White" CornerRadius="6" Padding="10,6" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                                    <TextBlock Name="TxtTargetInfo" Text="Espacio disponible: --" FontSize="11" Foreground="#888888"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <!-- PROGRESO -->
+                        <Border Background="#121212" CornerRadius="10" Padding="14" BorderBrush="#20FFFFFF" BorderThickness="1">
+                            <StackPanel Spacing="8">
+                                <Grid ColumnDefinitions="*, Auto">
+                                    <TextBlock Name="TxtProgressPercent" Grid.Column="0" Text="Esperando inicio..." Foreground="White" FontWeight="SemiBold" FontSize="13"/>
+                                    <TextBlock Name="TxtProgressSpeed" Grid.Column="1" Text="0 MB/s" Foreground="#00D2FF" FontWeight="Bold" FontSize="13"/>
+                                </Grid>
+                                <ProgressBar Name="PbMigration" Height="14" CornerRadius="7" Foreground="#00D2FF" Background="#25FFFFFF" Minimum="0" Maximum="100" Value="0"/>
+                                <TextBlock Name="TxtCurrentFile" Text="Listo para iniciar" FontSize="11" Foreground="#777777" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ACCIÓN -->
+                        <Grid ColumnDefinitions="*, Auto, Auto">
+                            <TextBlock Grid.Column="0" Text="⚠️ Se copiarán todos los datos y permisos sin alterar el disco de origen." VerticalAlignment="Center" FontSize="11" Foreground="#888888" TextWrapping="Wrap"/>
+                            <Button Grid.Column="1" Name="BtnCancel" Content="Cancelar" Click="BtnCancel_Click" IsEnabled="False" Background="#FF4444" Foreground="White" CornerRadius="8" Padding="16,10" FontWeight="SemiBold" Margin="0,0,8,0"/>
+                            <Button Grid.Column="2" Name="BtnStartMigration" Content="🚀 Iniciar Transferencia" Click="BtnStartMigration_Click" Background="#00D2FF" Foreground="#121212" CornerRadius="8" Padding="20,10" FontWeight="Bold"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Window>
