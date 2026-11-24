@@ -7,8 +7,8 @@
     <Authors>RichyKunBv</Authors>
     <Nullable>enable</Nullable>
     <VersionFileContent>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)..\shared\Version.cs'))</VersionFileContent>
-    <Version>$([System.Text.RegularExpressions.Regex]::Match($(VersionFileContent), '(?&lt;= "V?)[0-9\.]+').Value)</Version>
-    <RuntimeIdentifiers>linux-x64;win-x64;osx-x64;osx-arm64</RuntimeIdentifiers>
+    <Version>$([System.Text.RegularExpressions.Regex]::Match($(VersionFileContent), 'class UltraConfVersion[\s\S]*?Texto[\s\S]*?&quot;([0-9\.]+)&quot;').Groups[1].Value)</Version>
+    <RuntimeIdentifiers>linux-x64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>

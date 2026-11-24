@@ -9,4 +9,9 @@ namespace NubeZero.Shared
     {
         public static string Texto { get; set; } = "8002";
     }
+
+    public static class UltraConfVersion
+    {
+        public static string Texto { get; set; } = "0.1.0";
+    }
 }
