@@ -201,7 +201,7 @@ public partial class MainWindow : Window
         await SendMaintenanceCommandAsync(enable: false);
     }
 
-    private async void SendMaintenanceCommandAsync(bool enable)
+    private async Task SendMaintenanceCommandAsync(bool enable)
     {
         string url = TxtServerUrl.Text?.Trim() ?? "";
         string token = TxtAdminToken.Text?.Trim() ?? "";

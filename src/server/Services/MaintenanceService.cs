@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -53,6 +54,16 @@ namespace NubeZero.Server.Services
             }
         }
 
+        private static bool CheckIsLinux()
+        {
+#if NETCOREAPP || NET5_0_OR_GREATER
+            return OperatingSystem.IsLinux();
+#else
+            int p = (int)Environment.OSVersion.Platform;
+            return (p == 4) || (p == 6) || (p == 128);
+#endif
+        }
+
         private static void SafelyUnmountIfApplicable(string? path)
         {
             if (string.IsNullOrWhiteSpace(path)) return;
@@ -60,31 +71,35 @@ namespace NubeZero.Server.Services
             try
             {
                 // Sincronizar buffers al disco en Linux
-                if (OperatingSystem.IsLinux())
+                if (CheckIsLinux())
                 {
                     Console.WriteLine("[Maintenance] Ejecutando sync del sistema de archivos...");
-                    using var syncProc = Process.Start(new ProcessStartInfo
+                    using (var syncProc = Process.Start(new ProcessStartInfo
                     {
                         FileName = "sync",
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,
                         UseShellExecute = false
-                    });
-                    syncProc?.WaitForExit(5000);
+                    }))
+                    {
+                        syncProc?.WaitForExit(5000);
+                    }
 
                     // Si la ruta es un montaje directo (ej /media/... o /mnt/...), intentar un umount no forzado
                     if (path.StartsWith("/media/") || path.StartsWith("/mnt/"))
                     {
                         Console.WriteLine($"[Maintenance] Intentando desmontar unidad en {path}...");
-                        using var umountProc = Process.Start(new ProcessStartInfo
+                        using (var umountProc = Process.Start(new ProcessStartInfo
                         {
                             FileName = "umount",
                             Arguments = path,
                             RedirectStandardOutput = true,
                             RedirectStandardError = true,
                             UseShellExecute = false
-                        });
-                        umountProc?.WaitForExit(5000);
+                        }))
+                        {
+                            umountProc?.WaitForExit(5000);
+                        }
                     }
                 }
             }
